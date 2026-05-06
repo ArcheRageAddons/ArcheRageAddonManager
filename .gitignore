@@ -1,0 +1,63 @@
+# --- Build outputs ---
+build/bin/
+frontend/dist/
+frontend/node_modules/
+frontend/package.json.md5
+build/windows/installer/
+# Wails-generated bindings (regenerated on every build)
+frontend/wailsjs/
+
+# --- Go ---
+*.exe
+*.exe~
+*.test
+*.out
+vendor/
+
+# --- Node ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Editors / IDEs ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- OS junk ---
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# --- Local secrets / env ---
+.env
+.env.*
+!.env.example
+
+# --- Logs ---
+*.log
+
+yamls/
+
+test-registry/
+
+CLAUDE.md
+.claude/
+.anthropic/
+.cursor/
+.cursorrules
+.aider*
+.continue/
+.windsurfrules
+
+/supabase/
+
+/New Text Document*.txt
+/*-audit.html
+/*-audit.json
+/*-report.html
