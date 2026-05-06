@@ -10,7 +10,7 @@ Download the latest `ArcheRageAddonManager.exe` from the [Releases](https://gith
 
 Submitting is fully in-app. You don't write or open YAML by hand and you don't open the PR yourself — the manager does both for you.
 
-1. **Sign in with Discord** (Account panel, top-right of the manager).
+1. **Sign in with Discord**
 2. **Connect GitHub.** When prompted in the submission flow, the manager opens GitHub's device-flow login in your browser. The OAuth token has zero scopes — it's only used to verify your identity and confirm you have push access to the source repo you're claiming.
 3. **Click My Addons → Submit new addon.** Fill out the 3-step form:
     - **Step 1 — basics.** Name, addon ID (becomes the registry filename), category, description, keywords, optional icon URL, optional dependencies.
@@ -50,7 +50,3 @@ icon: "https://..."              # optional, any HTTPS URL
 ```
 
 The filename without `.yaml` becomes the addon's stable ID — that's also what other addons use in their `dependencies:` list.
-
----
-
-*The manager itself is independent from the ArcheRage server team. ArcheRage is a registered trademark of its owners.*
