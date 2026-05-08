@@ -94,6 +94,13 @@
             >
               Browse
             </button>
+            <button
+              on:click={handleSave}
+              disabled={saving}
+              class="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-50 text-sm"
+            >
+              {saving ? 'Saving...' : 'Save'}
+            </button>
           </div>
 
           <!-- OneDrive warning -->
@@ -111,17 +118,6 @@
               </span>
             </div>
           </div>
-        </div>
-
-        <!-- Save Button -->
-        <div class="flex justify-end">
-          <button
-            on:click={handleSave}
-            disabled={saving}
-            class="px-6 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-50 text-sm"
-          >
-            {saving ? 'Saving...' : 'Save Settings'}
-          </button>
         </div>
 
         <!-- Diagnostics -->
@@ -310,8 +306,14 @@
               <span class="flex-1">My addon isn't showing up in-game even though it installed. What now?</span>
             </summary>
             <div class="px-4 pb-4 pt-1 text-sm text-text-secondary space-y-2">
-              <p>Three common causes, in order of likelihood:</p>
+              <p>Common causes, in order of likelihood:</p>
               <ol class="list-decimal list-inside space-y-1 marker:text-accent">
+                <li>
+                  <strong>Addon not enabled on the character select screen</strong> — installing an
+                  addon only puts the files in place; ArcheRage still needs you to tick it on. Open the
+                  <em>Addons</em> menu on the character select screen, find the addon in the list, and
+                  enable it. Then enter the world.
+                </li>
                 <li>
                   <strong>OneDrive path mismatch</strong> — if your Documents folder is synced to OneDrive,
                   ArcheRage often expects the addon under the OneDrive copy of <code>Documents\ArcheRage\Addon</code>

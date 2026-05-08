@@ -7,6 +7,7 @@
     downloadProgress,
     installSerially,
   } from '../stores/app.js';
+  import { dropdown } from '../motion.js';
 
   let open = false;
   let busyById = {};
@@ -100,7 +101,7 @@
   </button>
 
   {#if open}
-    <div class="absolute top-full right-0 mt-2 w-80 bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden">
+    <div class="absolute top-full right-0 mt-2 w-80 bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden origin-top-right" transition:dropdown>
       <div class="px-4 py-3 border-b border-border flex items-center justify-between">
         <span class="text-sm font-semibold text-text-primary">Addon updates</span>
         {#if count > 0}

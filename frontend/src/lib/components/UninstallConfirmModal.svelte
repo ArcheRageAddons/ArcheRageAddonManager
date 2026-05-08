@@ -2,6 +2,7 @@
   import { uninstallAddon, showUninstallConfirm, showNotification } from '../stores/app.js';
   import { UninstallAddon } from '../../../wailsjs/go/main/App.js';
   import { createEventDispatcher } from 'svelte';
+  import { modalBackdrop, modalContent } from '../motion.js';
 
   const dispatch = createEventDispatcher();
   let uninstalling = false;
@@ -36,10 +37,11 @@
 <svelte:window on:keydown={handleKeydown} />
 
 {#if $showUninstallConfirm && $uninstallAddon}
-  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100]" on:click={close}>
+  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100]" on:click={close} transition:modalBackdrop>
     <div
       class="bg-bg-secondary border border-border rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl"
       on:click|stopPropagation
+      transition:modalContent
     >
       <!-- Header -->
       <div class="flex items-start gap-3 mb-4">

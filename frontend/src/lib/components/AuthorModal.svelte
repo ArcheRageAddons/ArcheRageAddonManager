@@ -4,6 +4,7 @@
     selectedAddon, showAddonDetails,
   } from '../stores/app.js';
   import { GetAddons, OpenURL } from '../../../wailsjs/go/main/App.js';
+  import { modalBackdrop, modalContent } from '../motion.js';
 
   let allAddons = [];
   let loading = false;
@@ -76,8 +77,9 @@
     on:click={handleBackdropClick}
     on:keydown={(e) => e.key === 'Escape' && close()}
     tabindex="-1"
+    transition:modalBackdrop
   >
-    <div class="bg-bg-secondary border border-border rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl">
+    <div class="bg-bg-secondary border border-border rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" transition:modalContent>
       <!-- Header -->
       <div class="p-5 border-b border-border flex justify-between items-start">
         <div class="min-w-0">

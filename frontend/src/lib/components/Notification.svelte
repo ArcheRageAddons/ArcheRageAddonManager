@@ -1,5 +1,6 @@
 <script>
   import { notification } from '../stores/app.js';
+  import { toastSlide } from '../motion.js';
 
   $: bgClass = $notification?.type === 'success' ? 'bg-success' :
                $notification?.type === 'error' ? 'bg-red-500' :
@@ -20,7 +21,8 @@
 
 {#if $notification}
   <div
-    class="fixed bottom-6 right-6 z-[100] animate-slide-in"
+    class="fixed bottom-6 right-6 z-[100]"
+    transition:toastSlide
   >
     <div class="{bgClass} text-white px-5 py-3 rounded-lg shadow-xl flex items-center gap-3 text-sm">
       {#if $notification.type === 'success'}
@@ -55,19 +57,3 @@
   </div>
 {/if}
 
-<style>
-  @keyframes slide-in {
-    from {
-      opacity: 0;
-      transform: translateX(100%);
-    }
-    to {
-      opacity: 1;
-      transform: translateX(0);
-    }
-  }
-
-  .animate-slide-in {
-    animation: slide-in 0.3s ease-out forwards;
-  }
-</style>

@@ -1,5 +1,6 @@
 <script>
   import { showWarningModal, warningAddon, showAddonDetails, downloadProgress, kickOffInstall } from '../stores/app.js';
+  import { modalBackdrop, modalContent } from '../motion.js';
 
   function close() {
     showWarningModal.set(false);
@@ -25,8 +26,9 @@
     on:click={handleBackdropClick}
     on:keydown={(e) => e.key === 'Escape' && close()}
     tabindex="-1"
+    transition:modalBackdrop
   >
-    <div class="bg-bg-secondary border border-border rounded-xl max-w-md w-full shadow-2xl">
+    <div class="bg-bg-secondary border border-border rounded-xl max-w-md w-full shadow-2xl" transition:modalContent>
       <!-- Header -->
       <div class="p-5 border-b border-border flex items-center gap-4">
         <div class="p-2.5 bg-warning/20 rounded-lg">

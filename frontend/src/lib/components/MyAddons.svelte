@@ -15,6 +15,7 @@
     OpenURL,
   } from '../../../wailsjs/go/main/App.js';
   import Spinner from './Spinner.svelte';
+  import { modalBackdrop, modalContent } from '../motion.js';
 
   let submissions = [];
   let loading = true;
@@ -447,12 +448,14 @@
     on:click={cancelWithdraw}
     on:keydown={(e) => e.key === 'Escape' && cancelWithdraw()}
     role="presentation"
+    transition:modalBackdrop
   >
     <div
       class="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-md"
       on:click|stopPropagation
       role="dialog"
       aria-modal="true"
+      transition:modalContent
     >
       <div class="p-5 border-b border-border">
         <h3 class="text-lg font-bold text-text-primary">Withdraw submission?</h3>
@@ -492,12 +495,14 @@
     on:click={cancelClearHistory}
     on:keydown={(e) => e.key === 'Escape' && cancelClearHistory()}
     role="presentation"
+    transition:modalBackdrop
   >
     <div
       class="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-md"
       on:click|stopPropagation
       role="dialog"
       aria-modal="true"
+      transition:modalContent
     >
       <div class="p-5 border-b border-border">
         <h3 class="text-lg font-bold text-text-primary">Clear submission history?</h3>
@@ -538,12 +543,14 @@
     on:click={cancelDeleteAddon}
     on:keydown={(e) => e.key === 'Escape' && cancelDeleteAddon()}
     role="presentation"
+    transition:modalBackdrop
   >
     <div
       class="bg-bg-secondary border-2 border-warning/60 rounded-xl shadow-2xl w-full max-w-md"
       on:click|stopPropagation
       role="dialog"
       aria-modal="true"
+      transition:modalContent
     >
       <div class="p-5 border-b border-border">
         <div class="flex items-center gap-3">

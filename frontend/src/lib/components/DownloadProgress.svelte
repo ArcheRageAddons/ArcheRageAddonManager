@@ -4,6 +4,7 @@
   import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime.js';
   import { OpenBackupFolder } from '../../../wailsjs/go/main/App.js';
   import { createEventDispatcher } from 'svelte';
+  import { modalBackdrop, modalContent } from '../motion.js';
 
   const dispatch = createEventDispatcher();
   let timeoutId = null;
@@ -100,8 +101,8 @@
 </script>
 
 {#if $downloadProgress.isDownloading}
-  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100]">
-    <div class="bg-bg-secondary border border-border rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100]" transition:modalBackdrop>
+    <div class="bg-bg-secondary border border-border rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" transition:modalContent>
       <h3 class="text-lg font-bold text-text-primary mb-4">
         Downloading {$downloadProgress.addonName || 'Addon'}
       </h3>

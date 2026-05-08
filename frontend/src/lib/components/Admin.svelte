@@ -9,6 +9,7 @@
     OpenURL,
   } from '../../../wailsjs/go/main/App.js';
   import Spinner from './Spinner.svelte';
+  import { modalBackdrop, modalContent } from '../motion.js';
 
   let tab = 'submissions';   // 'submissions' | 'users'
   let submissions = [];
@@ -402,12 +403,14 @@
     on:click={cancelDeny}
     on:keydown={(e) => e.key === 'Escape' && cancelDeny()}
     role="presentation"
+    transition:modalBackdrop
   >
     <div
       class="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-md"
       on:click|stopPropagation
       role="dialog"
       aria-modal="true"
+      transition:modalContent
     >
       <div class="p-5 border-b border-border">
         <h3 class="text-lg font-bold text-text-primary">Deny submission</h3>

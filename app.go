@@ -1040,7 +1040,10 @@ func (a *App) SubmitAddon(r SubmitAddonRequest) (*SubmitAddonResult, error) {
 	}, nil
 }
 
-// RLS scopes this to the caller's own rows.
+// Explicit submitted_by filter — RLS would normally scope this to the
+// caller's rows, but the `admins read all subs` policy lets admins see
+// every row in the table. We don't want the My Addons page to balloon
+// to "every submission ever" for maintainers.
 func (a *App) GetMySubmissions() ([]SubmissionRow, error) {
 	tokens, err := a.loadSupabaseTokens()
 	if err != nil {
@@ -1049,9 +1052,13 @@ func (a *App) GetMySubmissions() ([]SubmissionRow, error) {
 	if tokens == nil {
 		return nil, nil
 	}
+	if tokens.User.ID == "" {
+		return nil, fmt.Errorf("session has no user id")
+	}
 
-	url := supabase.URL + "/rest/v1/submissions?select=id,addon_slug,yaml_content,github_repo,github_path,status,decision_reason,created_at,decided_at,github_pr_number,github_pr_url,github_pr_branch&order=created_at.desc"
-	req, err := http.NewRequest("GET", url, nil)
+	endpoint := supabase.URL + "/rest/v1/submissions?submitted_by=eq." + url.QueryEscape(tokens.User.ID) +
+		"&select=id,addon_slug,yaml_content,github_repo,github_path,status,decision_reason,created_at,decided_at,github_pr_number,github_pr_url,github_pr_branch&order=created_at.desc"
+	req, err := http.NewRequest("GET", endpoint, nil)
 	if err != nil {
 		return nil, err
 	}

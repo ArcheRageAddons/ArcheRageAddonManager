@@ -47,6 +47,7 @@
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
   import Notification from './lib/components/Notification.svelte';
   import DownloadProgress from './lib/components/DownloadProgress.svelte';
+  import { pageFade } from './lib/motion.js';
 
   onMount(async () => {
     let firstRun = false;
@@ -88,17 +89,21 @@
     <Sidebar />
 
   <div class="flex-1 flex flex-col overflow-hidden">
-    {#if $currentPage === 'browse'}
-      <Browse />
-    {:else if $currentPage === 'installed'}
-      <Installed />
-    {:else if $currentPage === 'my-addons'}
-      <MyAddons />
-    {:else if $currentPage === 'admin'}
-      <Admin />
-    {:else if $currentPage === 'settings'}
-      <Settings />
-    {/if}
+    {#key $currentPage}
+      <div class="flex-1 flex flex-col overflow-hidden" in:pageFade>
+        {#if $currentPage === 'browse'}
+          <Browse />
+        {:else if $currentPage === 'installed'}
+          <Installed />
+        {:else if $currentPage === 'my-addons'}
+          <MyAddons />
+        {:else if $currentPage === 'admin'}
+          <Admin />
+        {:else if $currentPage === 'settings'}
+          <Settings />
+        {/if}
+      </div>
+    {/key}
   </div>
 
   </div>

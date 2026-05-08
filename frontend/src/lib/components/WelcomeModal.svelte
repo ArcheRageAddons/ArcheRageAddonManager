@@ -8,6 +8,7 @@
     SelectFolder,
     GetAddonPath,
   } from '../../../wailsjs/go/main/App.js';
+  import { modalBackdrop, modalContent } from '../motion.js';
 
   let candidates = [];
   let selectedPath = '';
@@ -77,9 +78,11 @@
 {#if $showWelcomeModal}
   <div
     class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+    transition:modalBackdrop
   >
     <div
       class="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+      transition:modalContent
     >
       <!-- Header -->
       <div class="p-6 border-b border-border flex items-center gap-3">

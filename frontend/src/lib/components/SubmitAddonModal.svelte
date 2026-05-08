@@ -13,6 +13,7 @@
   } from '../../../wailsjs/go/main/App.js';
   import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime.js';
   import Spinner from './Spinner.svelte';
+  import { modalBackdrop, modalContent } from '../motion.js';
 
   let categories = [];
   let availableAddons = [];
@@ -301,12 +302,14 @@
     on:click={close}
     on:keydown={(e) => e.key === 'Escape' && close()}
     role="presentation"
+    transition:modalBackdrop
   >
     <div
       class="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
       on:click|stopPropagation
       role="dialog"
       aria-modal="true"
+      transition:modalContent
     >
       <!-- Header -->
       <div class="p-5 border-b border-border flex items-center justify-between sticky top-0 bg-bg-secondary z-10">

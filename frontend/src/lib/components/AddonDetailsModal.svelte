@@ -8,6 +8,7 @@
     GetAddonSize,
     GetAddonDetails,
   } from '../../../wailsjs/go/main/App.js';
+  import { modalBackdrop, modalContent } from '../motion.js';
 
   let myRating = 0;       // 0 = not rated by this user
   let hoverRating = 0;
@@ -184,8 +185,9 @@
     on:click={handleBackdropClick}
     on:keydown={(e) => e.key === 'Escape' && close()}
     tabindex="-1"
+    transition:modalBackdrop
   >
-    <div class="bg-bg-secondary border border-border rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl">
+    <div class="bg-bg-secondary border border-border rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" transition:modalContent>
       <!-- Header -->
       <div class="p-5 border-b border-border flex justify-between items-start gap-4">
         <div class="flex items-center gap-4 min-w-0">

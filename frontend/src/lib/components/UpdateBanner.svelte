@@ -3,6 +3,7 @@
   import { CheckForUpdate, OpenURL, InstallUpdate } from '../../../wailsjs/go/main/App.js';
   import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime.js';
   import { showNotification } from '../stores/app.js';
+  import { modalBackdrop, modalContent, bannerSlide } from '../motion.js';
 
   let update = null;
   let dismissedVersion = null;
@@ -108,7 +109,7 @@
 </script>
 
 {#if visible}
-  <div class="bg-accent/15 border-b border-accent/40 px-4 py-2 flex items-center gap-3 flex-shrink-0">
+  <div class="bg-accent/15 border-b border-accent/40 px-4 py-2 flex items-center gap-3 flex-shrink-0" transition:bannerSlide>
     <svg class="w-4 h-4 text-accent flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
     </svg>
@@ -145,8 +146,8 @@
 {/if}
 
 {#if phase === 'confirming' && update}
-  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
-    <div class="bg-bg-secondary border border-border rounded-xl max-w-md w-full p-5 shadow-2xl">
+  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4" transition:modalBackdrop>
+    <div class="bg-bg-secondary border border-border rounded-xl max-w-md w-full p-5 shadow-2xl" transition:modalContent>
       <h3 class="text-lg font-bold text-text-primary mb-2">Install {update.version}?</h3>
       <p class="text-sm text-text-secondary leading-relaxed">
         The manager will download the new build (~{update.asset_size ? (update.asset_size / 1024 / 1024).toFixed(1) + ' MB' : 'a few MB'}), close itself, and reopen on the new version. Make sure no addon downloads are in progress.
@@ -170,8 +171,8 @@
 {/if}
 
 {#if phase === 'downloading' || phase === 'done'}
-  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
-    <div class="bg-bg-secondary border border-border rounded-xl max-w-md w-full p-5 shadow-2xl">
+  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4" transition:modalBackdrop>
+    <div class="bg-bg-secondary border border-border rounded-xl max-w-md w-full p-5 shadow-2xl" transition:modalContent>
       <h3 class="text-lg font-bold text-text-primary mb-3">
         {phase === 'done' ? 'Update applied' : `Installing ${update?.version || 'update'}…`}
       </h3>
@@ -190,8 +191,8 @@
 {/if}
 
 {#if phase === 'error'}
-  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
-    <div class="bg-bg-secondary border border-red-500/40 rounded-xl max-w-md w-full p-5 shadow-2xl">
+  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4" transition:modalBackdrop>
+    <div class="bg-bg-secondary border border-red-500/40 rounded-xl max-w-md w-full p-5 shadow-2xl" transition:modalContent>
       <h3 class="text-lg font-bold text-red-400 mb-2">Update failed</h3>
       <p class="text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">{errorMessage}</p>
       <div class="flex justify-end gap-2 mt-4">
