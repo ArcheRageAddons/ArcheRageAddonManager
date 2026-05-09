@@ -54,6 +54,11 @@ type App struct {
 	cachedAddons    []registry.Addon
 	cachedStats     map[string]addonStatRow
 	cachedMyRatings map[string]int
+	// Registry-cache state — kept alongside cachedAddons so background
+	// revalidation can ship `If-None-Match` and skip refetching unchanged
+	// YAMLs based on per-blob SHA.
+	cachedRegistryEntries []registry.RegistryCacheEntry
+	cachedRegistryETag    string
 }
 
 // Render Name in the UI; pass ID to install / lookup calls. Name falls back
@@ -132,10 +137,64 @@ func (a *App) startup(ctx context.Context) {
 	// Authenticated registry calls get GitHub's 5000/hr rate limit (vs 60/hr).
 	a.syncRegistryToken()
 
+	// Hydrate cachedAddons from the on-disk cache so Browse renders instantly.
+	a.loadRegistryCacheFromDisk()
+	go a.refreshRegistryInBackground()
+
 	go cleanupOldBinary()
 	go a.updateCheckLoop()
 
 	logger.Info("startup complete")
+}
+
+func (a *App) registryCachePath() string {
+	return filepath.Join(config.GetConfigDir(), "registry-cache.json")
+}
+
+func (a *App) loadRegistryCacheFromDisk() {
+	cache, err := registry.LoadCache(a.registryCachePath())
+	if err != nil {
+		logger.Warnf("registry: load cache failed: %v", err)
+		return
+	}
+	if cache == nil {
+		return
+	}
+	a.cachedRegistryEntries = cache.Entries
+	a.cachedRegistryETag = cache.ETag
+	a.cachedAddons = registry.EntriesToAddons(cache.Entries)
+	logger.Infof("registry: loaded %d addons from cache (etag=%q)", len(cache.Entries), cache.ETag)
+}
+
+// Conditional revalidation. If the listing's ETag matches, this is a single
+// small request and we keep using cached data. Otherwise we refetch only the
+// YAMLs whose blob SHA changed.
+func (a *App) refreshRegistryInBackground() {
+	newETag, entries, err := a.registryClient.GetAllAddonsConditional(a.cachedRegistryETag, a.cachedRegistryEntries)
+	if errors.Is(err, registry.ErrCacheNotModified) {
+		return
+	}
+	if err != nil {
+		logger.Warnf("registry: background refresh failed: %v", err)
+		return
+	}
+
+	a.cachedRegistryEntries = entries
+	a.cachedRegistryETag = newETag
+	a.cachedAddons = registry.EntriesToAddons(entries)
+
+	if err := registry.SaveCache(a.registryCachePath(), &registry.RegistryCache{
+		ETag:      newETag,
+		FetchedAt: time.Now(),
+		Entries:   entries,
+	}); err != nil {
+		logger.Warnf("registry: save cache failed: %v", err)
+	}
+
+	if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "registry:refreshed")
+	}
+	logger.Infof("registry: background refresh updated cache (%d addons, etag=%q)", len(entries), newETag)
 }
 
 func (a *App) syncRegistryToken() {
@@ -1497,15 +1556,30 @@ func (a *App) loadSupabaseTokens() (*auth.Tokens, error) {
 }
 
 func (a *App) RefreshAddons() error {
-	a.cachedAddons = nil
+	// Stats and ratings always re-fetch on manual Refresh; the registry uses
+	// the conditional path so a 304 from GitHub is essentially free.
 	a.cachedStats = nil
 	a.cachedMyRatings = nil
 
-	addons, err := a.registryClient.GetAllAddons()
+	newETag, entries, err := a.registryClient.GetAllAddonsConditional(a.cachedRegistryETag, a.cachedRegistryEntries)
+	if errors.Is(err, registry.ErrCacheNotModified) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
-	a.cachedAddons = addons
+
+	a.cachedRegistryEntries = entries
+	a.cachedRegistryETag = newETag
+	a.cachedAddons = registry.EntriesToAddons(entries)
+
+	if err := registry.SaveCache(a.registryCachePath(), &registry.RegistryCache{
+		ETag:      newETag,
+		FetchedAt: time.Now(),
+		Entries:   entries,
+	}); err != nil {
+		logger.Warnf("registry: save cache failed: %v", err)
+	}
 	return nil
 }
 

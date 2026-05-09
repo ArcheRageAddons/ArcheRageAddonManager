@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { selectedAddon, showAddonDetails, appInitialized, showNotification, refreshAvailableUpdates } from '../stores/app.js';
   import { GetAddons, GetCategories, RefreshAddons } from '../../../wailsjs/go/main/App.js';
+  import { EventsOn } from '../../../wailsjs/runtime/runtime.js';
   import AddonCard from './AddonCard.svelte';
   import AddonGridTile from './AddonGridTile.svelte';
 
@@ -84,8 +85,14 @@
     };
     window.addEventListener('addon-installed', handleAddonChange);
 
+    // Background registry refresh produced new data — re-pull from Go.
+    const offRegistry = EventsOn('registry:refreshed', () => {
+      if (initialized) loadAddons();
+    });
+
     return () => {
       window.removeEventListener('addon-installed', handleAddonChange);
+      offRegistry();
     };
   });
 
