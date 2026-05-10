@@ -1,6 +1,6 @@
 # ArcheRage Addon Manager
 
-A lightweight, portable Windows desktop app for browsing, installing, and managing ArcheRage UI / quality-of-life addons. Addons are sourced from a community-maintained GitHub registry — no backend account is required to browse and install.
+A lightweight, portable Windows desktop app for browsing, installing, and managing ArcheRage UI / quality-of-life addons. Addons are sourced from a community-maintained GitHub registry — no account is required to browse and install.
 
 Download the latest `ArcheRageAddonManager.exe` from the [Releases](https://github.com/ArcheRageAddons/ArcheRageAddonManager/releases/latest) page, drop it anywhere outside OneDrive, and run it.
 
