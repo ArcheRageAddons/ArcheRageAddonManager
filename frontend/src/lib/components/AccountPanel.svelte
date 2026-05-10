@@ -23,19 +23,17 @@
 
   async function handleLogin() {
     busy = true;
-    console.log('[login] LoginWithDiscord called');
     try {
       const u = await LoginWithDiscord();
-      console.log('[login] returned user:', u);
       currentUser.set(u || null);
       if (u) {
         showNotification(`Logged in as ${u.discord_username || 'user'}`, 'success');
       } else {
-        showNotification('Login returned no user — check terminal for [auth] logs', 'error', 10000);
+        showNotification('Login failed. Try again, or check the log folder from Settings if it keeps happening.', 'error', 10000);
       }
     } catch (e) {
       const msg = (e && e.toString) ? e.toString() : String(e);
-      console.error('[login] FAILED:', e);
+      console.error('Login failed:', e);
       // Keep the error toast on screen for 15s so it's actually readable.
       showNotification(`Login failed: ${msg}`, 'error', 15000);
     }
