@@ -54,6 +54,7 @@ type App struct {
 	cachedAddons    []registry.Addon
 	cachedStats     map[string]addonStatRow
 	cachedMyRatings map[string]int
+	cachedReadmes   map[string]*AddonReadme
 	// Registry-cache state — kept alongside cachedAddons so background
 	// revalidation can ship `If-None-Match` and skip refetching unchanged
 	// YAMLs based on per-blob SHA.
@@ -1950,6 +1951,183 @@ func (a *App) CheckDangerousFiles(id string) (bool, []string, error) {
 		}
 	}
 	return false, nil, fmt.Errorf("addon not found: %s", id)
+}
+
+// AddonReadme is the result of GetAddonReadme — the README markdown plus
+// the base URL the frontend uses to resolve relative image paths.
+type AddonReadme struct {
+	Markdown string `json:"markdown"`
+	BaseURL  string `json:"base_url"`
+}
+
+const maxReadmeBytes = 100 * 1024
+
+// GetAddonReadme fetches README.md from the addon's pinned source commit.
+// Returns an empty struct (not an error) when no README exists or any
+// fetch error happens — the frontend silently falls back to the YAML
+// description. Cached per session.
+func (a *App) GetAddonReadme(id string) (*AddonReadme, error) {
+	if cached, ok := a.cachedReadmes[id]; ok {
+		return cached, nil
+	}
+
+	if a.cachedAddons == nil {
+		addons, err := a.registryClient.GetAllAddons()
+		if err != nil {
+			return &AddonReadme{}, nil
+		}
+		a.cachedAddons = addons
+	}
+
+	var found *registry.Addon
+	for i, addon := range a.cachedAddons {
+		if addon.ID == id {
+			found = &a.cachedAddons[i]
+			break
+		}
+	}
+	if found == nil {
+		return &AddonReadme{}, nil
+	}
+
+	owner, repo, err := registry.ParseRepoURL(found.GitHub.Repo)
+	if err != nil {
+		return &AddonReadme{}, nil
+	}
+
+	ref := found.GitHub.Branch
+	if found.GitHub.Commit != "" {
+		ref = found.GitHub.Commit
+	} else if found.GitHub.Tag != "" {
+		ref = found.GitHub.Tag
+	}
+
+	subPath := strings.Trim(found.GitHub.Path, "/")
+	var readmePath string
+	if subPath != "" {
+		readmePath = subPath + "/README.md"
+	} else {
+		readmePath = "README.md"
+	}
+	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, ref, readmePath)
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return &AddonReadme{}, nil
+	}
+	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return &AddonReadme{}, nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		empty := &AddonReadme{}
+		if a.cachedReadmes == nil {
+			a.cachedReadmes = map[string]*AddonReadme{}
+		}
+		a.cachedReadmes[id] = empty
+		return empty, nil
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxReadmeBytes+1))
+	if err != nil {
+		return &AddonReadme{}, nil
+	}
+	if len(body) > maxReadmeBytes {
+		logger.Warnf("README for %s exceeded %d bytes — falling back to YAML description", id, maxReadmeBytes)
+		empty := &AddonReadme{}
+		if a.cachedReadmes == nil {
+			a.cachedReadmes = map[string]*AddonReadme{}
+		}
+		a.cachedReadmes[id] = empty
+		return empty, nil
+	}
+
+	baseURL := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/", owner, repo, ref)
+	if subPath != "" {
+		baseURL += subPath + "/"
+	}
+
+	result := &AddonReadme{
+		Markdown: string(body),
+		BaseURL:  baseURL,
+	}
+	if a.cachedReadmes == nil {
+		a.cachedReadmes = map[string]*AddonReadme{}
+	}
+	a.cachedReadmes[id] = result
+	return result, nil
+}
+
+// CheckRepoReadme reports whether a README.md exists at the given
+// repo/branch/path location. Used by the submission form to surface a
+// "README detected" banner so authors know it'll be used as the
+// description in the manager. Cheap HEAD request — no body fetched.
+func (a *App) CheckRepoReadme(repo, branch, path string) (bool, error) {
+	if strings.TrimSpace(repo) == "" {
+		return false, nil
+	}
+	owner, repoName, err := registry.ParseRepoURL(repo)
+	if err != nil {
+		return false, nil
+	}
+	if branch == "" {
+		branch = "main"
+	}
+	subPath := strings.Trim(path, "/")
+	var readmePath string
+	if subPath != "" {
+		readmePath = subPath + "/README.md"
+	} else {
+		readmePath = "README.md"
+	}
+	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repoName, branch, readmePath)
+
+	req, err := http.NewRequest("HEAD", url, nil)
+	if err != nil {
+		return false, nil
+	}
+	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return false, nil
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK, nil
+}
+
+// OpenReadmeLink opens an external link from an addon's README in the
+// user's default browser. Allows any HTTPS host (READMEs may link to
+// YouTube, Twitter, etc.) but refuses non-https schemes that could be
+// abused (javascript:, data:, file:, etc.).
+func (a *App) OpenReadmeLink(target string) error {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+	if parsed.Scheme != "https" {
+		return fmt.Errorf("OpenReadmeLink refused: only https allowed (got %q)", parsed.Scheme)
+	}
+	if parsed.Host == "" {
+		return fmt.Errorf("OpenReadmeLink refused: missing host")
+	}
+	if parsed.User != nil {
+		return fmt.Errorf("OpenReadmeLink refused: URL contains credentials")
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target)
+	case "darwin":
+		cmd = exec.Command("open", target)
+	default:
+		cmd = exec.Command("xdg-open", target)
+	}
+	return cmd.Start()
 }
 
 // Prefer commit-SHA equality (immutable); fall back to semver for unpinned legacy entries.

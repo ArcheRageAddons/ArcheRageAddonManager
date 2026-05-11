@@ -2,13 +2,16 @@
   import { selectedAddon, showAddonDetails, showNotification, warningAddon, showWarningModal, downloadProgress, currentUser, uninstallAddon, showUninstallConfirm, selectedAuthor, showAuthorModal, kickOffInstall, installSerially } from '../stores/app.js';
   import {
     OpenURL,
+    OpenReadmeLink,
     GetMyRating,
     SetAddonRating,
     ClearAddonRating,
     GetAddonSize,
     GetAddonDetails,
+    GetAddonReadme,
   } from '../../../wailsjs/go/main/App.js';
   import { modalBackdrop, modalContent } from '../motion.js';
+  import { renderReadme } from '../markdown.js';
 
   let myRating = 0;       // 0 = not rated by this user
   let hoverRating = 0;
@@ -16,6 +19,8 @@
   let depBulkBusy = false;
   let downloadSize = null; // null=not yet fetched, -1=unknown, 0+=bytes
   let sizeFetchedFor = null;
+  let readmeHTML = '';
+  let readmeFetchedFor = null;
 
   $: isInstalledNoUpdate = !!($selectedAddon && $selectedAddon.is_installed && !$selectedAddon.has_update);
 
@@ -39,6 +44,15 @@
     downloadSize = null;
   }
 
+  $: if ($showAddonDetails && $selectedAddon && readmeFetchedFor !== $selectedAddon.id) {
+    readmeFetchedFor = $selectedAddon.id;
+    readmeHTML = '';
+    fetchReadme($selectedAddon.id);
+  } else if (!$showAddonDetails) {
+    readmeFetchedFor = null;
+    readmeHTML = '';
+  }
+
   async function fetchSize(id) {
     try {
       const bytes = await GetAddonSize(id);
@@ -49,6 +63,27 @@
     } catch {
       if (sizeFetchedFor === id) downloadSize = -1;
     }
+  }
+
+  async function fetchReadme(id) {
+    try {
+      const result = await GetAddonReadme(id);
+      if (readmeFetchedFor !== id) return; // user moved on
+      if (result?.markdown) {
+        readmeHTML = renderReadme(result.markdown, result.base_url || '');
+      }
+    } catch (e) {
+      console.warn('README fetch failed:', e);
+    }
+  }
+
+  function handleReadmeClick(e) {
+    const link = e.target.closest('a[data-readme-link]');
+    if (!link) return;
+    e.preventDefault();
+    const href = link.getAttribute('href');
+    if (!href) return;
+    OpenReadmeLink(href).catch((err) => console.error('OpenReadmeLink failed:', err));
   }
 
   function formatBytes(n) {
@@ -340,12 +375,21 @@
             </div>
           {/if}
 
-          <!-- Description -->
+          <!-- Description (README if author shipped one, else YAML description) -->
           <div>
             <h3 class="text-sm font-medium text-text-primary mb-2">Description</h3>
-            <p class="text-sm text-text-secondary whitespace-pre-wrap leading-relaxed">
-              {$selectedAddon.description || 'No description provided.'}
-            </p>
+            {#if readmeHTML}
+              <div
+                class="markdown-body text-sm text-text-secondary leading-relaxed max-h-[50vh] overflow-y-auto pr-2"
+                on:click={handleReadmeClick}
+              >
+                {@html readmeHTML}
+              </div>
+            {:else}
+              <p class="text-sm text-text-secondary whitespace-pre-wrap leading-relaxed">
+                {$selectedAddon.description || 'No description provided.'}
+              </p>
+            {/if}
           </div>
 
           <!-- Keywords -->

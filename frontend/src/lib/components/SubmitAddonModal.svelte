@@ -10,6 +10,7 @@
     SubmitAddon,
     OpenURL,
     GetAddons,
+    CheckRepoReadme,
   } from '../../../wailsjs/go/main/App.js';
   import { EventsOn, EventsOff } from '../../../wailsjs/runtime/runtime.js';
   import Spinner from './Spinner.svelte';
@@ -263,14 +264,52 @@
     resetForm();
   }
 
+  // The game's loader refuses anything that isn't pure letters and refuses
+  // any folder whose name contains the substring "addon" (case-insensitive).
+  // Same rule enforced server-side in internal/registry.ValidateFolderName.
+  $: folderNameError = (() => {
+    const n = (form.folder_name || '').trim();
+    if (!n) return null; // empty handled by canSubmit
+    if (!/^[A-Za-z]{1,64}$/.test(n)) {
+      return 'Letters only (a-z, A-Z). No digits, spaces, or symbols. Max 64 characters.';
+    }
+    if (n.toLowerCase().includes('addon')) {
+      return 'Cannot contain "addon" — the game refuses to load folders with that substring.';
+    }
+    return null;
+  })();
+
   $: canSubmit =
     !!ghUser &&
     !submitting &&
     form.name.trim() &&
     form.folder_name.trim() &&
+    !folderNameError &&
     form.author.trim() &&
     form.version.trim() &&
     form.github_repo.trim();
+
+  // README detection — checks raw.githubusercontent.com for README.md
+  // at the chosen repo/branch/path so the form can tell the user their
+  // README will take priority over the description box.
+  let readmeDetected = null;        // null = not checked, true/false = result
+  let lastReadmeCheckKey = '';
+  let showReadmeHelp = false;
+  $: triggerReadmeCheck(form.github_repo, form.github_branch, form.github_path);
+  async function triggerReadmeCheck(repo, branch, path) {
+    const key = `${repo}|${branch}|${path}`;
+    if (key === lastReadmeCheckKey) return;
+    lastReadmeCheckKey = key;
+    if (!repo?.trim()) {
+      readmeDetected = null;
+      return;
+    }
+    try {
+      readmeDetected = await CheckRepoReadme(repo, branch || 'main', path || '');
+    } catch {
+      readmeDetected = null;
+    }
+  }
 
   $: depCandidates = availableAddons.filter((a) => {
     const ownSlug = (form.folder_name || '').trim().toLowerCase();
@@ -481,12 +520,15 @@
                 type="text"
                 bind:value={form.folder_name}
                 placeholder="dpsmeter"
-                class="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm focus:outline-none focus:border-accent"
+                class="w-full px-3 py-2 bg-bg-primary border rounded-lg text-sm focus:outline-none {folderNameError ? 'border-red-500/60 focus:border-red-500' : 'border-border focus:border-accent'}"
               />
+              {#if folderNameError}
+                <p class="text-xs text-red-400 mt-1">{folderNameError}</p>
+              {/if}
             </div>
           </div>
           <p class="text-xs text-text-muted -mt-1">
-            Folder name is what the game looks for inside <code>Addon/</code>. Often must match exactly.
+            Folder name is what the game looks for inside <code>Addon/</code>. Letters only (a-z) — the game refuses digits, symbols, spaces, and the word "addon".
           </p>
 
           <div class="grid grid-cols-2 gap-3">
@@ -512,6 +554,34 @@
 
           <div>
             <label class="block text-xs text-text-secondary mb-1.5">Description</label>
+            {#if readmeDetected === true}
+              <div class="mb-2 rounded-lg border border-accent/40 bg-accent/10 px-3 py-2 text-xs text-text-secondary flex items-start gap-2">
+                <svg class="w-4 h-4 text-accent flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                  <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+                </svg>
+                <span>
+                  <strong class="text-text-primary">README.md detected</strong> at the chosen repo / path. It will be shown as the description in the manager — this field is only used as a fallback if the README is missing or fails to load.
+                </span>
+              </div>
+            {:else if readmeDetected === false}
+              <div class="mb-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-text-secondary flex items-start gap-2">
+                <svg class="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <path d="M12 16v-4M12 8h.01"/>
+                </svg>
+                <span class="flex-1">
+                  <strong class="text-text-primary">No README.md detected.</strong> Adding one to your addon's folder lets you show rich text, images, and links as the description.
+                </span>
+                <button
+                  type="button"
+                  on:click={() => (showReadmeHelp = true)}
+                  class="text-accent hover:text-accent-hover underline whitespace-nowrap flex-shrink-0"
+                >
+                  Learn more
+                </button>
+              </div>
+            {/if}
             <textarea
               bind:value={form.description}
               rows="3"
@@ -663,6 +733,92 @@
         >
           {#if submitting}<Spinner size="sm" />{/if}
           {submitting ? 'Submitting...' : (isUpdate ? 'Submit update for review' : 'Submit for review')}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showReadmeHelp}
+  <div
+    class="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+    on:click={() => (showReadmeHelp = false)}
+    on:keydown={(e) => e.key === 'Escape' && (showReadmeHelp = false)}
+    role="presentation"
+    transition:modalBackdrop
+  >
+    <div
+      class="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto"
+      on:click|stopPropagation
+      role="dialog"
+      aria-modal="true"
+      transition:modalContent
+    >
+      <div class="p-5 border-b border-border flex items-start gap-3">
+        <svg class="w-6 h-6 text-accent flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+          <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/>
+        </svg>
+        <div>
+          <h3 class="text-lg font-bold text-text-primary leading-tight">Using a README as your description</h3>
+          <p class="text-xs text-text-muted mt-1">A richer alternative to the plain-text description field.</p>
+        </div>
+      </div>
+
+      <div class="p-5 space-y-4 text-sm text-text-secondary leading-relaxed">
+        <p>
+          If you drop a <code class="text-warning bg-bg-tertiary px-1 rounded">README.md</code> file in your addon's folder, the manager will show it as the addon's description instead of the plain text you typed below.
+        </p>
+
+        <div>
+          <h4 class="font-semibold text-text-primary mb-1.5">Where to put it</h4>
+          <ul class="space-y-1 list-disc list-inside ml-1">
+            <li>Whole repo is your addon → <code class="text-xs">README.md</code> at the repo root</li>
+            <li>Multi-addon repo → <code class="text-xs">README.md</code> inside the subfolder you picked above</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="font-semibold text-text-primary mb-1.5">What it supports</h4>
+          <ul class="space-y-1 list-disc list-inside ml-1">
+            <li>Headings, paragraphs, <strong>bold</strong>, <em>italic</em>, <code class="text-xs">inline code</code></li>
+            <li>Bullet and numbered lists</li>
+            <li>Code blocks, blockquotes, tables, horizontal rules</li>
+            <li>Images — both external HTTPS URLs and relative paths to images in your own repo</li>
+            <li>Hyperlinks that open in the user's default browser</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="font-semibold text-text-primary mb-1.5">What it doesn't support (by design)</h4>
+          <ul class="space-y-1 list-disc list-inside ml-1">
+            <li>Raw HTML or <code class="text-xs">&lt;script&gt;</code> tags — stripped for safety</li>
+            <li>Inline video embeds — YouTube links open in the browser as clickable text</li>
+            <li>Non-https / <code class="text-xs">javascript:</code> / <code class="text-xs">data:</code> URLs — refused</li>
+          </ul>
+        </div>
+
+        <div>
+          <h4 class="font-semibold text-text-primary mb-1.5">Updating</h4>
+          <p>
+            The README is pinned to the commit your addon ships at. To publish an updated README, submit a new version of your addon — same flow.
+          </p>
+        </div>
+
+        <div>
+          <h4 class="font-semibold text-text-primary mb-1.5">If you don't add a README</h4>
+          <p>
+            That's fine. The Description field below is the fallback and will be shown as-is.
+          </p>
+        </div>
+      </div>
+
+      <div class="p-5 border-t border-border flex justify-end">
+        <button
+          on:click={() => (showReadmeHelp = false)}
+          class="px-5 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium"
+        >
+          Got it
         </button>
       </div>
     </div>
