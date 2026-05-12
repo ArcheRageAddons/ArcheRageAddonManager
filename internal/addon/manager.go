@@ -3,6 +3,7 @@ package addon
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -180,17 +181,6 @@ func (m *AddonManager) InstallAddon(addonID, name, version, repoURL, folderPath,
 		downloadRef = commitHash
 	}
 
-	// Overlays layer on top of an existing install; normal addons own
-	// their folder and back up the existing version before wiping it.
-	if overlayOf == "" {
-		if progressCallback != nil {
-			progressCallback(0, 100, "Backing up existing addon...")
-		}
-		if err := m.BackupAddon(destFolder); err != nil {
-			return fmt.Errorf("backup failed: %v", err)
-		}
-	}
-
 	if progressCallback != nil {
 		progressCallback(5, 100, "Downloading addon from GitHub...")
 	}
@@ -235,25 +225,59 @@ func (m *AddonManager) InstallAddon(addonID, name, version, repoURL, folderPath,
 	cfg := config.Get()
 	addonDir := filepath.Join(cfg.AddonPath, destFolder)
 
-	// Wipe is for normal installs only; overlays write on top of the base.
-	if overlayOf == "" {
-		if err := os.RemoveAll(addonDir); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to remove existing directory: %v", err)
+	// Overlays write on top of the base addon's folder — same as before.
+	// Non-overlays stage to a sibling folder first, copy any user-data
+	// files forward from the old install (anything not in the new
+	// zipball), then atomically swap. Old folder gets moved to Backup/.
+	if overlayOf != "" {
+		if err := os.MkdirAll(addonDir, 0755); err != nil {
+			return err
 		}
-	}
-
-	if err := os.MkdirAll(addonDir, 0755); err != nil {
-		return err
-	}
-
-	err = m.githubClient.ExtractZipToFolder(zipData, addonDir, folderPath, func(current, total int) {
-		if progressCallback != nil && total > 0 {
-			progress := 60 + (30 * current / total)
-			progressCallback(progress, 100, fmt.Sprintf("Extracting files... (%d/%d)", current, total))
+		err = m.githubClient.ExtractZipToFolder(zipData, addonDir, folderPath, func(current, total int) {
+			if progressCallback != nil && total > 0 {
+				progress := 60 + (30 * current / total)
+				progressCallback(progress, 100, fmt.Sprintf("Extracting files... (%d/%d)", current, total))
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("failed to extract ZIP: %v", err)
 		}
-	})
-	if err != nil {
-		return fmt.Errorf("failed to extract ZIP: %v", err)
+	} else {
+		stagingDir := addonDir + ".staging"
+		_ = os.RemoveAll(stagingDir) // any leftover from a previously-failed install
+		if err := os.MkdirAll(stagingDir, 0755); err != nil {
+			return fmt.Errorf("create staging dir: %v", err)
+		}
+
+		err = m.githubClient.ExtractZipToFolder(zipData, stagingDir, folderPath, func(current, total int) {
+			if progressCallback != nil && total > 0 {
+				progress := 60 + (28 * current / total)
+				progressCallback(progress, 100, fmt.Sprintf("Extracting files... (%d/%d)", current, total))
+			}
+		})
+		if err != nil {
+			_ = os.RemoveAll(stagingDir)
+			return fmt.Errorf("failed to extract ZIP: %v", err)
+		}
+
+		if _, statErr := os.Stat(addonDir); statErr == nil {
+			if progressCallback != nil {
+				progressCallback(88, 100, "Preserving your saved data...")
+			}
+			if err := preserveUserData(addonDir, stagingDir); err != nil {
+				_ = os.RemoveAll(stagingDir)
+				return fmt.Errorf("preserve user data: %v", err)
+			}
+			if err := m.BackupAddon(destFolder); err != nil {
+				_ = os.RemoveAll(stagingDir)
+				return fmt.Errorf("backup failed: %v", err)
+			}
+		}
+
+		if err := os.Rename(stagingDir, addonDir); err != nil {
+			_ = os.RemoveAll(stagingDir)
+			return fmt.Errorf("swap-in new install: %v", err)
+		}
 	}
 
 	if progressCallback != nil {
@@ -347,3 +371,71 @@ func (m *AddonManager) UninstallAddon(addonID string) error {
 	return m.SaveInstalledAddons(installed)
 }
 
+// preserveUserData walks the existing live folder and copies any files that
+// AREN'T present at the same relative path in the staged new install. These
+// are presumed to be user-data files (settings, saved state, recipe lists,
+// etc.) the addon wrote at runtime. Without this step, every update would
+// silently lose them.
+//
+// Symlinks and other non-regular files are skipped — addons shouldn't be
+// shipping or producing those, and copying them blindly is a security risk.
+func preserveUserData(liveDir, stagingDir string) error {
+	return filepath.Walk(liveDir, func(srcPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(liveDir, srcPath)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+
+		mode := info.Mode()
+
+		if info.IsDir() {
+			stagingPath := filepath.Join(stagingDir, rel)
+			if _, err := os.Stat(stagingPath); os.IsNotExist(err) {
+				if err := os.MkdirAll(stagingPath, mode.Perm()); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+
+		if mode&os.ModeSymlink != 0 || !mode.IsRegular() {
+			return nil
+		}
+
+		stagingPath := filepath.Join(stagingDir, rel)
+		if _, err := os.Stat(stagingPath); err == nil {
+			// The new install ships this file — let it overwrite, don't preserve.
+			return nil
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+
+		return copyFile(srcPath, stagingPath)
+	})
+}
+
+func copyFile(src, dst string) error {
+	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
+		return err
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	return err
+}

@@ -218,6 +218,7 @@ func (a *App) GetCategories() []string {
 		"Quality of Life",
 		"Class Specific",
 		"Utility",
+		"Dev Tools",
 		"Other",
 	}
 }
