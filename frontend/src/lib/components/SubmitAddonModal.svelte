@@ -42,6 +42,7 @@
     github_repo: '',
     github_branch: 'main',
     github_path: '',
+    overlay_of: '',
   };
 
   let submitting = false;
@@ -88,6 +89,7 @@
         github_repo: prefill.github_repo || '',
         github_branch: prefill.github_branch || 'main',
         github_path: prefill.github_path || '',
+        overlay_of: prefill.overlay_of || '',
       };
       selectedDeps = new Set(prefill.dependencies || []);
       isUpdate = true;
@@ -209,6 +211,7 @@
         github_repo: form.github_repo,
         github_branch: form.github_branch,
         github_path: form.github_path,
+        overlay_of: form.overlay_of,
       });
       const verb = isUpdate ? 'Update submitted' : 'Submitted';
       if (result?.pr_url) {
@@ -251,6 +254,7 @@
       github_repo: '',
       github_branch: 'main',
       github_path: '',
+      overlay_of: '',
     };
     selectedDeps = new Set();
     depSearch = '';
@@ -264,14 +268,14 @@
     resetForm();
   }
 
-  // The game's loader refuses anything that isn't pure letters and refuses
+  // The game's loader refuses anything that isn't letters/digits and refuses
   // any folder whose name contains the substring "addon" (case-insensitive).
   // Same rule enforced server-side in internal/registry.ValidateFolderName.
   $: folderNameError = (() => {
     const n = (form.folder_name || '').trim();
     if (!n) return null; // empty handled by canSubmit
-    if (!/^[A-Za-z]{1,64}$/.test(n)) {
-      return 'Letters only (a-z, A-Z). No digits, spaces, or symbols. Max 64 characters.';
+    if (!/^[A-Za-z0-9]{1,64}$/.test(n)) {
+      return 'Letters and digits only (a-z, A-Z, 0-9). No spaces or symbols. Max 64 characters.';
     }
     if (n.toLowerCase().includes('addon')) {
       return 'Cannot contain "addon" — the game refuses to load folders with that substring.';
@@ -715,6 +719,29 @@
               Users installing your addon will be told to also install these. The manager shows their install status in the addon's details.
             </p>
           </div>
+
+          {#if $currentUser?.is_admin}
+            <div>
+              <label class="block text-xs text-text-secondary mb-1.5">
+                Overlay base addon
+                <span class="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-warning/20 text-warning rounded">Admin</span>
+              </label>
+              <select
+                bind:value={form.overlay_of}
+                class="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm focus:outline-none focus:border-accent"
+              >
+                <option value="">— None (standalone addon) —</option>
+                {#each availableAddons as a}
+                  {#if a.id && a.id.toLowerCase() !== (form.folder_name || '').trim().toLowerCase()}
+                    <option value={a.id}>{a.name || a.id} ({a.id})</option>
+                  {/if}
+                {/each}
+              </select>
+              <p class="text-[10px] text-text-muted mt-1.5 leading-snug">
+                When set, this addon's files will install into the base addon's folder instead of its own (patcher pattern). Leave as "None" for normal addons. Only admins can change this — non-admin submissions preserve whatever the current registry has.
+              </p>
+            </div>
+          {/if}
         </div>
       </div>
 

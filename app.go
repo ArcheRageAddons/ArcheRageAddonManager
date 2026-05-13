@@ -108,6 +108,7 @@ type InstalledAddonInfo struct {
 	HasUpdate           bool   `json:"has_update"`
 	GithubCommitHash    string `json:"github_commit_hash"`
 	RemovedFromRegistry bool   `json:"removed_from_registry"`
+	Icon                string `json:"icon,omitempty"`
 }
 
 func NewApp() *App {
@@ -508,6 +509,7 @@ func (a *App) GetInstalledAddons() ([]InstalledAddonInfo, error) {
 		for _, regAddon := range a.cachedAddons {
 			if regAddon.ID == addon.ID {
 				foundInRegistry = true
+				info.Icon = regAddon.Icon
 				if hasUpdate(addon.GithubCommitHash, regAddon.GitHub.Commit, addon.Version, regAddon.Version) {
 					info.HasUpdate = true
 				}
@@ -1011,6 +1013,21 @@ func (a *App) SubmitAddon(r SubmitAddonRequest) (*SubmitAddonResult, error) {
 	}
 	if user.IsBanned {
 		return nil, fmt.Errorf("your account is banned from submitting")
+	}
+
+	// Overlay_of is admin-only. For non-admins, force the value to whatever
+	// the current registry has for this slug (preserves on updates; blocks
+	// any tampered frontend from sneaking a new overlay link in).
+	if !user.IsAdmin {
+		slug := strings.ToLower(strings.TrimSpace(r.FolderName))
+		current := ""
+		for _, a := range a.cachedAddons {
+			if strings.ToLower(a.ID) == slug {
+				current = a.OverlayOf
+				break
+			}
+		}
+		r.OverlayOf = current
 	}
 
 	// Pin the YAML to a specific commit SHA so users always download the

@@ -118,13 +118,13 @@
 </script>
 
 {#if visible}
-  <div class="bg-accent/15 border-b border-accent/40 flex-shrink-0 flex flex-col" transition:bannerSlide>
+  <div class="bg-red-500/10 border-b border-red-500/40 flex-shrink-0 flex flex-col" transition:bannerSlide>
     <div class="px-4 py-2 flex items-center gap-3">
-      <svg class="w-4 h-4 text-accent flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg class="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
       </svg>
       <div class="flex-1 text-sm text-text-primary truncate">
-        <strong class="text-accent">{update.version}</strong> is available — click <strong>Install now</strong> to update.
+        <strong class="text-red-500">{update.version}</strong> is available — click <strong>Install now</strong> to update.
       </div>
       {#if hasBody}
         <button
@@ -147,7 +147,7 @@
       {/if}
       <button
         on:click={startUpdate}
-        class="px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded text-xs font-medium"
+        class="px-3 py-1.5 bg-red-500/10 border border-red-500 hover:bg-red-500 text-red-500 hover:text-white rounded text-xs font-medium transition-colors"
         title={update.asset_url ? 'Download and install the update — the app will close and reopen' : 'No .exe asset on this release; opens the release page'}
       >
         {update.asset_url ? 'Install now' : 'Download'}
@@ -175,7 +175,7 @@
 
     {#if expanded && hasBody}
       <div
-        class="border-t border-accent/20 px-4 py-3 max-h-[40vh] overflow-y-auto"
+        class="border-t border-red-500/20 px-4 py-3 max-h-[40vh] overflow-y-auto"
         transition:slide={{ duration: 200, easing: cubicOut }}
       >
         <pre class="text-xs text-text-secondary whitespace-pre-wrap font-sans leading-relaxed">{update.body}</pre>

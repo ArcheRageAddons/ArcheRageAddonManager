@@ -132,14 +132,12 @@
         {#each installedAddons as addon}
           <div class="bg-bg-secondary hover:bg-bg-tertiary rounded-lg px-4 py-3 flex items-center gap-4 transition-colors">
             <!-- Icon -->
-            <div class="w-10 h-10 rounded-lg bg-bg-tertiary flex items-center justify-center flex-shrink-0">
-              {#if addon.removed_from_registry}
-                <svg class="w-5 h-5 text-warning" viewBox="0 0 24 24" fill="currentColor" title="No longer in the registry">
-                  <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
-                </svg>
+            <div class="w-10 h-10 rounded-lg bg-bg-tertiary flex items-center justify-center flex-shrink-0 overflow-hidden">
+              {#if addon.icon}
+                <img src={addon.icon} alt={addon.name} referrerpolicy="no-referrer" class="w-full h-full object-cover" />
               {:else}
-                <svg class="w-5 h-5 text-success" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M20 6L9 17l-5-5"/>
+                <svg class="w-5 h-5 text-text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                 </svg>
               {/if}
             </div>
@@ -178,10 +176,10 @@
               {/if}
               <button
                 on:click={() => handleUninstall(addon)}
-                class="p-2 hover:bg-red-500/20 hover:text-red-400 rounded-lg transition-colors text-text-muted"
+                class="p-1.5 bg-red-500/10 border border-red-500 hover:bg-red-500 rounded-md transition-colors text-red-500 hover:text-white"
                 title="Uninstall"
               >
-                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
                 </svg>
               </button>

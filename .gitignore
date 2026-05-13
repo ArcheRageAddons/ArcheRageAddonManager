@@ -47,6 +47,7 @@ yamls/
 test-registry/
 
 CLAUDE.md
+design.md
 .claude/
 .anthropic/
 .cursor/

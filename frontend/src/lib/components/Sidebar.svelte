@@ -63,18 +63,24 @@
         <span class="text-sm font-medium">Admin</span>
       </button>
     {/if}
+  </nav>
 
+  <!-- Settings cogwheel (expands to text on hover) -->
+  <div class="px-3 pb-2 flex">
     <button
       on:click={() => currentPage.set('settings')}
-      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors mb-1 {$currentPage === 'settings' ? 'bg-accent text-white' : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
+      title="Settings"
+      class="group flex items-center p-1.5 rounded-md transition-colors {$currentPage === 'settings' ? 'bg-accent text-white' : 'text-text-muted hover:bg-bg-tertiary hover:text-text-primary'}"
     >
-      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <svg class="w-5 h-5 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="3"/>
         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
       </svg>
-      <span class="text-sm font-medium">Settings</span>
+      <span class="text-sm font-medium overflow-hidden whitespace-nowrap max-w-0 group-hover:max-w-[5rem] group-hover:ml-2 transition-all duration-500">
+        Settings
+      </span>
     </button>
-  </nav>
+  </div>
 
   <!-- Account -->
   <AccountPanel />

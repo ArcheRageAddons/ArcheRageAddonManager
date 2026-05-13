@@ -54,7 +54,7 @@
 
 <button
   on:click
-  class="w-full bg-bg-secondary hover:bg-bg-tertiary rounded-lg px-4 py-3 flex items-center gap-4 transition-colors text-left group"
+  class="w-full bg-bg-secondary hover:bg-bg-tertiary rounded-lg px-4 py-3 flex items-center gap-4 transition-colors text-left group border-2 {addon.is_installed ? 'border-accent' : 'border-transparent'}"
 >
   <div class="w-10 h-10 rounded-lg bg-bg-tertiary flex items-center justify-center flex-shrink-0 overflow-hidden">
     {#if addon.icon}
@@ -142,10 +142,10 @@
       <!-- Uninstall Button -->
       <button
         on:click={handleUninstall}
-        class="p-2.5 hover:bg-red-500/20 hover:text-red-400 rounded-lg transition-colors text-text-muted"
+        class="p-1.5 bg-red-500/10 border border-red-500 hover:bg-red-500 rounded-md transition-colors text-red-500 hover:text-white"
         title="Uninstall"
       >
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
         </svg>
       </button>
@@ -155,16 +155,16 @@
     <button
       on:click={handleDownload}
       disabled={$downloadProgress.isDownloading}
-      class="p-2.5 hover:bg-bg-primary rounded-lg transition-colors disabled:opacity-50 text-text-muted hover:text-text-primary"
+      class="p-1.5 bg-accent/10 border border-accent hover:bg-accent rounded-md transition-colors disabled:opacity-50 text-accent hover:text-white"
       title={addon.is_installed ? (addon.has_update ? 'Update' : 'Reinstall') : 'Download'}
     >
       {#if $downloadProgress.isDownloading && $downloadProgress.addonId === addon.id}
-        <svg class="animate-spin w-5 h-5" viewBox="0 0 24 24">
+        <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24">
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
         </svg>
       {:else}
-        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
         </svg>
       {/if}

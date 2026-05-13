@@ -25,12 +25,12 @@ const (
 // to the zipball subtree filter at extract time. Both are treated as
 // untrusted to defeat traversal attempts.
 //
-// folder_name is restricted to letters only (no digits / symbols / spaces)
+// folder_name is restricted to letters and digits only (no symbols / spaces)
 // because the game's loader refuses to read anything else. The substring
 // "addon" is also refused for the same reason — the game treats any folder
 // whose name contains it as not-an-addon and skips loading.
 var (
-	folderNameRe = regexp.MustCompile(`^[A-Za-z]{1,64}$`)
+	folderNameRe = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
 	githubPathRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
 )
 
@@ -40,7 +40,7 @@ func ValidateFolderName(name string) error {
 		return fmt.Errorf("folder_name is empty")
 	}
 	if !folderNameRe.MatchString(name) {
-		return fmt.Errorf("folder_name %q is invalid (must be 1-64 letters only — no digits, spaces, or symbols)", name)
+		return fmt.Errorf("folder_name %q is invalid (must be 1-64 letters or digits only — no spaces or symbols)", name)
 	}
 	if strings.Contains(strings.ToLower(name), "addon") {
 		return fmt.Errorf("folder_name %q cannot contain \"addon\" — the game refuses to load folders with that substring", name)

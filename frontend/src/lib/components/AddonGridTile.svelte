@@ -4,7 +4,7 @@
 
 <button
   on:click
-  class="relative bg-bg-secondary hover:bg-bg-tertiary rounded-lg p-3 flex flex-col items-center gap-2 transition-colors text-left group min-h-[140px]"
+  class="relative bg-bg-secondary hover:bg-bg-tertiary rounded-lg p-3 flex flex-col items-center gap-2 transition-colors text-left group min-h-[140px] border-2 {addon.is_installed ? 'border-accent' : 'border-transparent'}"
   title={addon.name}
 >
   <div class="absolute top-1.5 right-1.5 flex items-center gap-1">
