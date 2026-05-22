@@ -55,6 +55,7 @@ type App struct {
 	cachedStats     map[string]addonStatRow
 	cachedMyRatings map[string]int
 	cachedReadmes   map[string]*AddonReadme
+	cachedCommits   map[string]commitCacheEntry
 	// Registry-cache state — kept alongside cachedAddons so background
 	// revalidation can ship `If-None-Match` and skip refetching unchanged
 	// YAMLs based on per-blob SHA.
@@ -141,6 +142,7 @@ func (a *App) startup(ctx context.Context) {
 
 	// Hydrate cachedAddons from the on-disk cache so Browse renders instantly.
 	a.loadRegistryCacheFromDisk()
+	a.loadCommitCacheFromDisk()
 	go a.refreshRegistryInBackground()
 
 	go cleanupOldBinary()
@@ -644,6 +646,76 @@ func (a *App) CheckForUpdate() (*ReleaseInfo, error) {
 		AssetURL:    assetURL,
 		AssetSize:   assetSize,
 	}, nil
+}
+
+// ReleaseHistoryEntry is one published release on GitHub, surfaced to the
+// Changelog page. Only v1.0.0+ stable releases are returned.
+type ReleaseHistoryEntry struct {
+	Version     string `json:"version"`
+	URL         string `json:"url"`
+	Body        string `json:"body"`
+	PublishedAt string `json:"published_at"`
+}
+
+// GetReleaseHistory pulls every non-draft, non-prerelease release from the
+// GitHub repo, filters to v1.0.0+ tags, and returns them newest-first.
+// The release body is the tagged commit message (per the release workflow),
+// so the user sees the same bullet list the in-app update banner renders.
+func (a *App) GetReleaseHistory() ([]ReleaseHistoryEntry, error) {
+	req, err := http.NewRequest("GET",
+		"https://api.github.com/repos/ArcheRageAddons/ArcheRageAddonManager/releases?per_page=100",
+		nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+	if t, _ := github_auth.LoadToken(); t != "" {
+		req.Header.Set("Authorization", "Bearer "+t)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("releases returned %d: %s", resp.StatusCode, body)
+	}
+
+	var raw []struct {
+		TagName     string `json:"tag_name"`
+		HTMLURL     string `json:"html_url"`
+		Body        string `json:"body"`
+		PublishedAt string `json:"published_at"`
+		Draft       bool   `json:"draft"`
+		Prerelease  bool   `json:"prerelease"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]ReleaseHistoryEntry, 0, len(raw))
+	for _, r := range raw {
+		if r.Draft || r.Prerelease || r.TagName == "" {
+			continue
+		}
+		num := strings.TrimPrefix(r.TagName, "v")
+		// Skip anything below v1.0.0 (the pre-1.0 versions are not interesting to end users).
+		if !isVersionHigher(num, "0.9.999") {
+			continue
+		}
+		out = append(out, ReleaseHistoryEntry{
+			Version:     r.TagName,
+			URL:         r.HTMLURL,
+			Body:        r.Body,
+			PublishedAt: r.PublishedAt,
+		})
+	}
+	// GitHub returns newest-first by default; preserve that order.
+	return out, nil
 }
 
 func (a *App) updateCheckLoop() {
@@ -2077,6 +2149,209 @@ func (a *App) GetAddonReadme(id string) (*AddonReadme, error) {
 	}
 	a.cachedReadmes[id] = result
 	return result, nil
+}
+
+// AddonCommit is one commit in an addon's git history, used by the details
+// modal's "Changelog" section. Commits are filtered to the YAML's github.path
+// when set, so legacy whole-repo addons get whole-repo history and subfolder
+// addons get only the commits that touched their subfolder.
+type AddonCommit struct {
+	SHA      string `json:"sha"`
+	ShortSHA string `json:"short_sha"`
+	Message  string `json:"message"`
+	Date     string `json:"date"`
+	Author   string `json:"author"`
+	URL      string `json:"url"`
+}
+
+// Persisted commit-history cache. Lives at %APPDATA%\commit-cache.json so
+// the changelog section in the details modal doesn't re-fetch every addon's
+// history on each launch. TTL guards staleness when an author pushes new
+// commits between sessions.
+type commitCacheEntry struct {
+	Commits   []AddonCommit `json:"commits"`
+	FetchedAt time.Time     `json:"fetched_at"`
+}
+
+type commitCacheFile struct {
+	Version int                         `json:"version"`
+	Entries map[string]commitCacheEntry `json:"entries"`
+}
+
+const (
+	commitCacheVersion  = 1
+	commitCacheMaxBytes = 5 * 1024 * 1024
+	commitCacheTTL      = 1 * time.Hour
+)
+
+func (a *App) commitCachePath() string {
+	return filepath.Join(config.GetConfigDir(), "commit-cache.json")
+}
+
+func (a *App) loadCommitCacheFromDisk() {
+	p := a.commitCachePath()
+	info, err := os.Stat(p)
+	if err != nil {
+		return
+	}
+	if info.Size() > commitCacheMaxBytes {
+		logger.Warnf("commit cache: %s is %d bytes (max %d) — ignoring", p, info.Size(), commitCacheMaxBytes)
+		return
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	var c commitCacheFile
+	if err := json.Unmarshal(data, &c); err != nil {
+		logger.Warnf("commit cache: malformed — ignoring")
+		return
+	}
+	if c.Version != commitCacheVersion {
+		return
+	}
+	a.cachedCommits = c.Entries
+	if a.cachedCommits == nil {
+		a.cachedCommits = map[string]commitCacheEntry{}
+	}
+	logger.Infof("commit cache: loaded %d entries", len(a.cachedCommits))
+}
+
+func (a *App) saveCommitCache() {
+	if a.cachedCommits == nil {
+		return
+	}
+	cache := commitCacheFile{
+		Version: commitCacheVersion,
+		Entries: a.cachedCommits,
+	}
+	data, err := json.MarshalIndent(cache, "", "  ")
+	if err != nil {
+		logger.Warnf("commit cache: marshal failed: %v", err)
+		return
+	}
+	p := a.commitCachePath()
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		logger.Warnf("commit cache: write tmp failed: %v", err)
+		return
+	}
+	if err := os.Rename(tmp, p); err != nil {
+		logger.Warnf("commit cache: rename failed: %v", err)
+	}
+}
+
+// GetAddonCommitHistory pulls the last 20 commits touching the addon's
+// source path from GitHub. Cache layers:
+//   - In-memory map keyed by addon ID; same session reuse is free.
+//   - On-disk commit-cache.json persists across launches with a 1h TTL.
+//     A stale or missing entry triggers a fresh fetch.
+func (a *App) GetAddonCommitHistory(id string) ([]AddonCommit, error) {
+	if cached, ok := a.cachedCommits[id]; ok {
+		if time.Since(cached.FetchedAt) < commitCacheTTL {
+			return cached.Commits, nil
+		}
+	}
+
+	if a.cachedAddons == nil {
+		addons, err := a.registryClient.GetAllAddons()
+		if err != nil {
+			return nil, err
+		}
+		a.cachedAddons = addons
+	}
+
+	var found *registry.Addon
+	for i, addon := range a.cachedAddons {
+		if addon.ID == id {
+			found = &a.cachedAddons[i]
+			break
+		}
+	}
+	if found == nil {
+		return nil, fmt.Errorf("addon %q not in registry", id)
+	}
+
+	owner, repo, err := registry.ParseRepoURL(found.GitHub.Repo)
+	if err != nil {
+		return nil, err
+	}
+
+	branch := found.GitHub.Branch
+	if branch == "" {
+		branch = "main"
+	}
+	subPath := strings.Trim(found.GitHub.Path, "/")
+
+	apiURL := fmt.Sprintf(
+		"https://api.github.com/repos/%s/%s/commits?sha=%s&per_page=20",
+		owner, repo, branch,
+	)
+	if subPath != "" {
+		apiURL += "&path=" + subPath
+	}
+
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+	if t, _ := github_auth.LoadToken(); t != "" {
+		req.Header.Set("Authorization", "Bearer "+t)
+	}
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("commits returned %d: %s", resp.StatusCode, body)
+	}
+
+	var raw []struct {
+		SHA     string `json:"sha"`
+		HTMLURL string `json:"html_url"`
+		Commit  struct {
+			Message string `json:"message"`
+			Author  struct {
+				Name string `json:"name"`
+				Date string `json:"date"`
+			} `json:"author"`
+		} `json:"commit"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, err
+	}
+
+	out := make([]AddonCommit, 0, len(raw))
+	for _, c := range raw {
+		short := c.SHA
+		if len(short) > 7 {
+			short = short[:7]
+		}
+		out = append(out, AddonCommit{
+			SHA:      c.SHA,
+			ShortSHA: short,
+			Message:  c.Commit.Message,
+			Date:     c.Commit.Author.Date,
+			Author:   c.Commit.Author.Name,
+			URL:      c.HTMLURL,
+		})
+	}
+
+	if a.cachedCommits == nil {
+		a.cachedCommits = map[string]commitCacheEntry{}
+	}
+	a.cachedCommits[id] = commitCacheEntry{
+		Commits:   out,
+		FetchedAt: time.Now(),
+	}
+	go a.saveCommitCache()
+	return out, nil
 }
 
 // CheckRepoReadme reports whether a README.md exists at the given

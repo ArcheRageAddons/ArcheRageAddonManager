@@ -63,6 +63,17 @@
         <span class="text-sm font-medium">Admin</span>
       </button>
     {/if}
+
+    <button
+      on:click={() => currentPage.set('changelog')}
+      class="w-full flex items-center gap-3 px-3 py-2.5 rounded-md transition-colors mb-1 {$currentPage === 'changelog' ? 'bg-accent text-white' : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'}"
+    >
+      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+        <path d="M14 2v6h6M8 13h8M8 17h5"/>
+      </svg>
+      <span class="text-sm font-medium">Changelog</span>
+    </button>
   </nav>
 
   <!-- Settings cogwheel (expands to text on hover) -->

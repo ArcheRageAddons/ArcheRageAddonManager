@@ -37,6 +37,7 @@
   import Settings from './lib/components/Settings.svelte';
   import MyAddons from './lib/components/MyAddons.svelte';
   import Admin from './lib/components/Admin.svelte';
+  import Changelog from './lib/components/Changelog.svelte';
   import AddonDetailsModal from './lib/components/AddonDetailsModal.svelte';
   import AuthorModal from './lib/components/AuthorModal.svelte';
   import UpdatesBell from './lib/components/UpdatesBell.svelte';
@@ -99,6 +100,8 @@
           <MyAddons />
         {:else if $currentPage === 'admin'}
           <Admin />
+        {:else if $currentPage === 'changelog'}
+          <Changelog />
         {:else if $currentPage === 'settings'}
           <Settings />
         {/if}

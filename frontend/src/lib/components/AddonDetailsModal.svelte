@@ -9,9 +9,12 @@
     GetAddonSize,
     GetAddonDetails,
     GetAddonReadme,
+    GetAddonCommitHistory,
   } from '../../../wailsjs/go/main/App.js';
   import { modalBackdrop, modalContent } from '../motion.js';
   import { renderReadme } from '../markdown.js';
+  import { slide } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
 
   let myRating = 0;       // 0 = not rated by this user
   let hoverRating = 0;
@@ -21,6 +24,9 @@
   let sizeFetchedFor = null;
   let readmeHTML = '';
   let readmeFetchedFor = null;
+  let commits = [];                 // [] = not fetched yet; non-empty once GetAddonCommitHistory resolves
+  let commitsFetchedFor = null;
+  let commitsExpanded = false;
 
   $: isInstalledNoUpdate = !!($selectedAddon && $selectedAddon.is_installed && !$selectedAddon.has_update);
 
@@ -53,6 +59,17 @@
     readmeHTML = '';
   }
 
+  $: if ($showAddonDetails && $selectedAddon && commitsFetchedFor !== $selectedAddon.id) {
+    commitsFetchedFor = $selectedAddon.id;
+    commits = [];
+    commitsExpanded = false;
+    fetchCommits($selectedAddon.id);
+  } else if (!$showAddonDetails) {
+    commitsFetchedFor = null;
+    commits = [];
+    commitsExpanded = false;
+  }
+
   async function fetchSize(id) {
     try {
       const bytes = await GetAddonSize(id);
@@ -75,6 +92,28 @@
     } catch (e) {
       console.warn('README fetch failed:', e);
     }
+  }
+
+  async function fetchCommits(id) {
+    try {
+      const result = await GetAddonCommitHistory(id);
+      if (commitsFetchedFor !== id) return; // user moved on
+      commits = result || [];
+    } catch (e) {
+      console.warn('Commit history fetch failed:', e);
+    }
+  }
+
+  function formatCommitDate(s) {
+    if (!s) return '';
+    const t = Date.parse(s);
+    if (isNaN(t)) return s;
+    return new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function openCommit(url) {
+    if (!url) return;
+    OpenReadmeLink(url).catch((err) => console.error('OpenReadmeLink failed:', err));
   }
 
   function handleReadmeClick(e) {
@@ -327,6 +366,78 @@
               {#if myRating > 0}
                 <span class="text-xs text-text-muted ml-1">— click again to clear</span>
               {/if}
+            </div>
+          {/if}
+
+          <!-- Changelog (commit history of the addon's source path) -->
+          {#if commits.length > 0}
+            <div>
+              <h3 class="text-sm font-medium text-text-primary mb-2">Changelog</h3>
+              <div class="bg-bg-tertiary border border-border rounded-lg overflow-hidden">
+                <!-- Latest commit (always visible) -->
+                <div class="px-3 py-2.5">
+                  <div class="flex items-baseline justify-between gap-3 mb-1">
+                    <div class="flex items-baseline gap-2 min-w-0">
+                      <span class="text-[10px] font-bold uppercase tracking-wider text-accent bg-accent/15 px-1.5 py-0.5 rounded">Latest</span>
+                      <span class="font-mono text-[11px] text-text-muted">{commits[0].short_sha}</span>
+                      <span class="text-[11px] text-text-muted">{formatCommitDate(commits[0].date)}</span>
+                    </div>
+                    <button
+                      on:click={() => openCommit(commits[0].url)}
+                      class="text-[11px] text-text-muted hover:text-text-primary flex-shrink-0"
+                      title="View commit on GitHub"
+                    >
+                      GitHub →
+                    </button>
+                  </div>
+                  <pre class="text-xs text-text-secondary whitespace-pre-wrap font-sans leading-relaxed">{commits[0].message}</pre>
+                </div>
+
+                {#if commits.length > 1}
+                  <button
+                    on:click={() => (commitsExpanded = !commitsExpanded)}
+                    class="w-full px-3 py-1.5 border-t border-border text-xs text-text-secondary hover:text-text-primary hover:bg-bg-secondary flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <span>{commitsExpanded ? 'Hide' : 'Show'} {commits.length - 1} older commit{commits.length - 1 === 1 ? '' : 's'}</span>
+                    <svg
+                      class="w-3.5 h-3.5 transition-transform duration-200"
+                      style="transform: rotate({commitsExpanded ? 180 : 0}deg);"
+                      viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    >
+                      <path d="M6 9l6 6 6-6"/>
+                    </svg>
+                  </button>
+
+                  {#if commitsExpanded}
+                    <div
+                      class="border-t border-border max-h-[40vh] overflow-y-auto"
+                      transition:slide={{ duration: 200, easing: cubicOut }}
+                    >
+                      {#each commits.slice(1) as c (c.sha)}
+                        <div class="px-3 py-2.5 border-b border-border last:border-b-0">
+                          <div class="flex items-baseline justify-between gap-3 mb-1">
+                            <div class="flex items-baseline gap-2 min-w-0">
+                              <span class="font-mono text-[11px] text-text-muted">{c.short_sha}</span>
+                              <span class="text-[11px] text-text-muted">{formatCommitDate(c.date)}</span>
+                              {#if c.author}
+                                <span class="text-[11px] text-text-muted truncate">· {c.author}</span>
+                              {/if}
+                            </div>
+                            <button
+                              on:click={() => openCommit(c.url)}
+                              class="text-[11px] text-text-muted hover:text-text-primary flex-shrink-0"
+                              title="View commit on GitHub"
+                            >
+                              GitHub →
+                            </button>
+                          </div>
+                          <pre class="text-xs text-text-secondary whitespace-pre-wrap font-sans leading-relaxed">{c.message}</pre>
+                        </div>
+                      {/each}
+                    </div>
+                  {/if}
+                {/if}
+              </div>
             </div>
           {/if}
 
