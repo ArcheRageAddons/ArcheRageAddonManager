@@ -1,12 +1,22 @@
 <script>
   import { onMount } from 'svelte';
   import { showNotification } from '../stores/app.js';
-  import { GetAddonPath, SetAddonPath, SelectFolder, OpenLogFolder } from '../../../wailsjs/go/main/App.js';
+  import {
+    GetAddonPath,
+    SetAddonPath,
+    SelectFolder,
+    OpenLogFolder,
+    GetSkipBackups,
+    SetSkipBackups,
+  } from '../../../wailsjs/go/main/App.js';
 
   let tab = 'downloads';
 
   let addonPath = '';
   let saving = false;
+
+  let skipBackups = false;
+  let skipBackupsBusy = false;
 
   onMount(async () => {
     try {
@@ -14,7 +24,31 @@
     } catch (e) {
       console.error('Failed to load settings:', e);
     }
+    try {
+      skipBackups = await GetSkipBackups();
+    } catch (e) {
+      console.error('Failed to load dev settings:', e);
+    }
   });
+
+  async function toggleSkipBackups() {
+    skipBackupsBusy = true;
+    const next = !skipBackups;
+    try {
+      await SetSkipBackups(next);
+      skipBackups = next;
+      showNotification(
+        next
+          ? 'Backups disabled. Updates will overwrite the live folder directly.'
+          : 'Backups re-enabled.',
+        next ? 'warning' : 'success',
+        5000,
+      );
+    } catch (e) {
+      showNotification(`Failed to update setting: ${e}`, 'error', 6000);
+    }
+    skipBackupsBusy = false;
+  }
 
   async function handleBrowse() {
     try {
@@ -67,6 +101,16 @@
         class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {tab === 'faq' ? 'border-accent text-text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}"
       >
         FAQ
+      </button>
+      <button
+        on:click={() => (tab = 'dev')}
+        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 {tab === 'dev' ? 'border-warning text-warning' : 'border-transparent text-text-muted hover:text-warning'}"
+        title="Settings for addon authors only"
+      >
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+        </svg>
+        Dev Settings
       </button>
     </div>
   </div>
@@ -418,6 +462,50 @@
               <p>At this time we do not support macOS or Linux.</p>
             </div>
           </details>
+        </div>
+
+      {:else if tab === 'dev'}
+        <div class="bg-warning/10 border border-warning/40 rounded-lg p-5 flex items-start gap-3">
+          <svg class="w-6 h-6 text-warning flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+          </svg>
+          <div class="text-sm text-text-secondary leading-relaxed">
+            <div class="font-bold text-warning mb-1">For addon developers only</div>
+            These settings change how the manager handles your addon files. They're meant for people writing addons who already have version control and don't need the manager's safety nets. <strong class="text-text-primary">Leave them alone</strong> if that's not you — the defaults are what every normal user wants.
+          </div>
+        </div>
+
+        <div class="bg-bg-secondary border border-border rounded-lg p-6">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex-1 min-w-0">
+              <h3 class="font-medium text-text-primary mb-1">Skip backups on update</h3>
+              <p class="text-sm text-text-secondary leading-relaxed">
+                Stops the manager from copying the existing addon folder to <code class="text-xs bg-bg-primary px-1.5 py-0.5 rounded">Addon\Backup\…</code> before applying an update. The smart-merge step that preserves your saved state still runs — only the recoverable backup snapshot is skipped.
+              </p>
+              <p class="text-xs text-warning mt-2 leading-relaxed">
+                <strong>You lose the "open backup folder" recovery path.</strong> If an update breaks something, your only option is to re-download or revert from your own git history. Don't enable this unless your addon's source lives in version control.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={skipBackups}
+              on:click={toggleSkipBackups}
+              disabled={skipBackupsBusy}
+              class="relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors disabled:opacity-60 {skipBackups ? 'bg-warning' : 'bg-bg-tertiary border border-border'}"
+              title={skipBackups ? 'Click to re-enable backups' : 'Click to disable backups on update'}
+            >
+              <span
+                class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform {skipBackups ? 'translate-x-6' : 'translate-x-1'}"
+              ></span>
+            </button>
+          </div>
+          <div class="mt-4 pt-4 border-t border-border text-xs text-text-muted">
+            Currently:
+            <strong class="text-text-primary">
+              {skipBackups ? 'Backups DISABLED — updates overwrite the live folder.' : 'Backups enabled — every update is snapshotted first.'}
+            </strong>
+          </div>
         </div>
       {/if}
 

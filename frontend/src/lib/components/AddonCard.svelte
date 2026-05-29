@@ -80,6 +80,11 @@
           Patch
         </span>
       {/if}
+      {#if addon.is_hidden}
+        <span class="px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider bg-warning/15 text-warning border border-warning/40 rounded" title="Temporarily hidden from non-admin users: {addon.hidden_reason || 'no reason given'}">
+          Hidden
+        </span>
+      {/if}
       {#if addon.has_dangerous_files}
         <svg class="w-4 h-4 text-warning flex-shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-label="Contains dangerous files">
           <title>Contains executable files (e.g. .bat / .exe / .dll / .lnk). Only install if you trust the author.</title>

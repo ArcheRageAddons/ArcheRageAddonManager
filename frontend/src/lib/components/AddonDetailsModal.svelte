@@ -10,6 +10,8 @@
     GetAddonDetails,
     GetAddonReadme,
     GetAddonCommitHistory,
+    HideAddon,
+    UnhideAddon,
   } from '../../../wailsjs/go/main/App.js';
   import { modalBackdrop, modalContent } from '../motion.js';
   import { renderReadme } from '../markdown.js';
@@ -27,6 +29,9 @@
   let commits = [];                 // [] = not fetched yet; non-empty once GetAddonCommitHistory resolves
   let commitsFetchedFor = null;
   let commitsExpanded = false;
+  let showHideReasonModal = false;
+  let hideReason = '';
+  let hideBusy = false;
 
   $: isInstalledNoUpdate = !!($selectedAddon && $selectedAddon.is_installed && !$selectedAddon.has_update);
 
@@ -114,6 +119,45 @@
   function openCommit(url) {
     if (!url) return;
     OpenReadmeLink(url).catch((err) => console.error('OpenReadmeLink failed:', err));
+  }
+
+  function openHideModal() {
+    hideReason = '';
+    showHideReasonModal = true;
+  }
+
+  async function confirmHide() {
+    const r = (hideReason || '').trim();
+    if (!r) {
+      showNotification('A reason is required.', 'warning', 4000);
+      return;
+    }
+    if (!$selectedAddon) return;
+    hideBusy = true;
+    try {
+      await HideAddon($selectedAddon.id, r);
+      // Optimistically reflect locally — Browse will re-pull on refresh.
+      selectedAddon.update((a) => a ? { ...a, is_hidden: true, hidden_reason: r, has_update: false } : a);
+      showHideReasonModal = false;
+      hideReason = '';
+      showNotification(`Hid ${$selectedAddon.id}`, 'success', 3000);
+    } catch (e) {
+      showNotification(`Hide failed: ${e}`, 'error', 6000);
+    }
+    hideBusy = false;
+  }
+
+  async function handleUnhide() {
+    if (!$selectedAddon) return;
+    hideBusy = true;
+    try {
+      await UnhideAddon($selectedAddon.id);
+      selectedAddon.update((a) => a ? { ...a, is_hidden: false, hidden_reason: '' } : a);
+      showNotification(`Unhid ${$selectedAddon.id}`, 'success', 3000);
+    } catch (e) {
+      showNotification(`Unhide failed: ${e}`, 'error', 6000);
+    }
+    hideBusy = false;
   }
 
   function handleReadmeClick(e) {
@@ -303,6 +347,18 @@
 
       <!-- Content -->
       <div class="p-5 overflow-y-auto flex-1">
+        {#if $selectedAddon.is_hidden}
+          <div class="mb-5 p-3 bg-warning/10 border border-warning/40 rounded-lg flex items-start gap-3">
+            <svg class="w-5 h-5 text-warning flex-shrink-0 mt-0.5" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
+            </svg>
+            <div class="text-sm flex-1 min-w-0">
+              <div class="font-semibold text-warning">Temporarily hidden by an admin</div>
+              <div class="text-text-secondary mt-1 whitespace-pre-wrap leading-relaxed">{$selectedAddon.hidden_reason || 'No reason given.'}</div>
+              <div class="text-xs text-text-muted mt-1.5">Existing installs keep working. Updates are paused until this is resolved.</div>
+            </div>
+          </div>
+        {/if}
         <div class="space-y-4">
           <!-- Category, stats, GitHub link -->
           <div class="flex flex-wrap gap-3 text-sm items-center">
@@ -611,6 +667,27 @@
       <div class="p-5 border-t border-border">
         <!-- Buttons -->
         <div class="flex justify-end gap-3">
+          {#if $currentUser?.is_admin}
+            {#if $selectedAddon.is_hidden}
+              <button
+                on:click={handleUnhide}
+                disabled={hideBusy}
+                class="px-4 py-2 bg-warning/10 border border-warning hover:bg-warning text-warning hover:text-bg-primary rounded-lg transition-colors text-sm disabled:opacity-50"
+                title="Make this addon visible again to everyone"
+              >
+                {hideBusy ? 'Unhiding…' : 'Unhide'}
+              </button>
+            {:else}
+              <button
+                on:click={openHideModal}
+                disabled={hideBusy}
+                class="px-4 py-2 bg-warning/10 border border-warning hover:bg-warning text-warning hover:text-bg-primary rounded-lg transition-colors text-sm disabled:opacity-50"
+                title="Temporarily hide this addon from non-admin users"
+              >
+                Hide addon
+              </button>
+            {/if}
+          {/if}
           <button
             on:click={close}
             disabled={$downloadProgress.isDownloading}
@@ -633,6 +710,57 @@
             {$selectedAddon.is_installed ? ($selectedAddon.has_update ? 'Update' : 'Uninstall') : 'Download'}
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showHideReasonModal && $selectedAddon}
+  <div
+    class="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4"
+    on:click|self={() => (showHideReasonModal = false)}
+    on:keydown={(e) => e.key === 'Escape' && (showHideReasonModal = false)}
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+    transition:modalBackdrop
+  >
+    <div class="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-md" transition:modalContent>
+      <div class="p-5 border-b border-border">
+        <h3 class="text-lg font-bold text-text-primary">Hide addon</h3>
+        <p class="text-sm text-text-muted mt-1">
+          <span class="font-mono text-text-primary">{$selectedAddon.id}</span>
+        </p>
+      </div>
+      <div class="p-5 space-y-3">
+        <p class="text-xs text-text-secondary leading-relaxed">
+          Non-admin users won't see this addon in Browse, search, or the dependency picker until you unhide it. Existing installs keep working but updates are paused. Users with it installed will see this reason on their Installed tab.
+        </p>
+        <label class="block text-xs text-text-secondary">Reason (required, max 500 chars)</label>
+        <textarea
+          bind:value={hideReason}
+          rows="4"
+          maxlength="500"
+          placeholder="e.g. dangerous file pattern found in commit abc1234 — pending submitter fix"
+          class="w-full px-3 py-2 bg-bg-primary border border-border rounded-lg text-sm focus:outline-none focus:border-accent text-text-primary"
+        ></textarea>
+        <p class="text-[10px] text-text-muted text-right">{hideReason.length} / 500</p>
+      </div>
+      <div class="p-5 border-t border-border flex justify-end gap-2">
+        <button
+          on:click={() => (showHideReasonModal = false)}
+          disabled={hideBusy}
+          class="px-4 py-2 bg-bg-tertiary hover:bg-border rounded-lg text-sm text-text-secondary transition-colors disabled:opacity-50"
+        >
+          Cancel
+        </button>
+        <button
+          on:click={confirmHide}
+          disabled={hideBusy || !hideReason.trim()}
+          class="px-4 py-2 bg-warning hover:bg-warning/80 text-bg-primary rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+        >
+          {hideBusy ? 'Hiding…' : 'Hide addon'}
+        </button>
       </div>
     </div>
   </div>

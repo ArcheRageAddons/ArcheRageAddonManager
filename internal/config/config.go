@@ -9,6 +9,11 @@ import (
 type Config struct {
 	AddonPath     string `json:"addon_path"`
 	SetupComplete bool   `json:"setup_complete"`
+	// SkipBackups disables the pre-update backup step entirely. Intended for
+	// addon authors who iterate fast and don't need the safety net (their
+	// git repo is the source of truth). Exposed in Settings → Dev Settings
+	// behind a clearly-labelled warning.
+	SkipBackups bool `json:"skip_backups,omitempty"`
 }
 
 // AddonPathCandidate is a possible Addon directory the manager has detected.
@@ -83,6 +88,12 @@ func SetAddonPath(path string) error {
 // Used when the user accepts the auto-detected path in the welcome dialog.
 func MarkSetupComplete() error {
 	appConfig.SetupComplete = true
+	return Save()
+}
+
+// SetSkipBackups toggles the dev-only "skip backups on update" flag.
+func SetSkipBackups(skip bool) error {
+	appConfig.SkipBackups = skip
 	return Save()
 }
 

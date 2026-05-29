@@ -20,6 +20,11 @@
         </svg>
       </span>
     {/if}
+    {#if addon.is_hidden}
+      <span class="px-1 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-warning/15 text-warning border border-warning/40 rounded" title="Temporarily hidden">
+        Hid
+      </span>
+    {/if}
   </div>
 
   <div class="absolute top-1.5 left-1.5 flex items-center gap-1">

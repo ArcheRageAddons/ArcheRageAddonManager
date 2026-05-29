@@ -56,6 +56,7 @@ type App struct {
 	cachedMyRatings map[string]int
 	cachedReadmes   map[string]*AddonReadme
 	cachedCommits   map[string]commitCacheEntry
+	cachedHidden    map[string]hiddenAddonRow
 	// Registry-cache state — kept alongside cachedAddons so background
 	// revalidation can ship `If-None-Match` and skip refetching unchanged
 	// YAMLs based on per-blob SHA.
@@ -99,6 +100,13 @@ type AddonListItem struct {
 	// BaseInstalled gates the install button for overlay addons.
 	OverlayOf     string `json:"overlay_of,omitempty"`
 	BaseInstalled bool   `json:"base_installed,omitempty"`
+	// IsHidden is set when an admin has temporarily hidden the addon. For
+	// non-admin callers, hidden addons are filtered out of GetAddons /
+	// GetAddonDetails entirely — these fields surface only to admins (who
+	// see hidden addons with a "Hidden" badge) and on the Installed tab
+	// (so users with an existing copy understand why updates are paused).
+	IsHidden     bool   `json:"is_hidden,omitempty"`
+	HiddenReason string `json:"hidden_reason,omitempty"`
 }
 
 type InstalledAddonInfo struct {
@@ -110,6 +118,8 @@ type InstalledAddonInfo struct {
 	GithubCommitHash    string `json:"github_commit_hash"`
 	RemovedFromRegistry bool   `json:"removed_from_registry"`
 	Icon                string `json:"icon,omitempty"`
+	IsHidden            bool   `json:"is_hidden,omitempty"`
+	HiddenReason        string `json:"hidden_reason,omitempty"`
 }
 
 func NewApp() *App {
@@ -255,9 +265,18 @@ func (a *App) GetAddons() ([]AddonListItem, error) {
 	}
 
 	stats := a.fetchAddonStats()
+	hidden := a.fetchHiddenAddons()
+	isAdmin := a.currentUserIsAdmin()
 
 	var result []AddonListItem
 	for _, addon := range a.cachedAddons {
+		hiddenRow, isHidden := hidden[addon.ID]
+		// Non-admins never see hidden addons in Browse. Admins see them with
+		// the IsHidden flag set so the UI can badge them.
+		if isHidden && !isAdmin {
+			continue
+		}
+
 		item := AddonListItem{
 			ID:                addon.ID,
 			Name:              addon.Name,
@@ -300,6 +319,14 @@ func (a *App) GetAddons() ([]AddonListItem, error) {
 			}
 		}
 
+		// Hidden addons surface their flag + reason and have updates suppressed
+		// — even admins shouldn't get an update banner for an addon they hid.
+		if isHidden {
+			item.IsHidden = true
+			item.HiddenReason = hiddenRow.Reason
+			item.HasUpdate = false
+		}
+
 		result = append(result, item)
 	}
 
@@ -324,6 +351,13 @@ func (a *App) GetAddonDetails(id string) (*AddonListItem, error) {
 	}
 
 	if found == nil {
+		return nil, fmt.Errorf("addon not found: %s", id)
+	}
+
+	// Non-admins can't see hidden addons even via direct fetch (defence in
+	// depth — Browse already filters them, but a stale UI could still try).
+	hiddenRow, isHidden := a.fetchHiddenAddons()[id]
+	if isHidden && !a.currentUserIsAdmin() {
 		return nil, fmt.Errorf("addon not found: %s", id)
 	}
 
@@ -369,6 +403,12 @@ func (a *App) GetAddonDetails(id string) (*AddonListItem, error) {
 		}
 	}
 
+	if isHidden {
+		item.IsHidden = true
+		item.HiddenReason = hiddenRow.Reason
+		item.HasUpdate = false
+	}
+
 	return item, nil
 }
 
@@ -403,6 +443,17 @@ func (a *App) DownloadAddon(id string) error {
 
 	if found == nil {
 		return fmt.Errorf("addon not found: %s", id)
+	}
+
+	// Refuse new installs of currently-hidden addons for non-admins. Admins
+	// can still install (for testing) and existing installs aren't affected
+	// — this only blocks the fresh download path.
+	if hiddenRow, isHidden := a.fetchHiddenAddons()[id]; isHidden && !a.currentUserIsAdmin() {
+		reason := hiddenRow.Reason
+		if reason == "" {
+			reason = "no reason provided"
+		}
+		return fmt.Errorf("this addon has been temporarily hidden by an admin: %s", reason)
 	}
 
 	// Failing fast here avoids spinning up the install goroutine + emitting
@@ -443,6 +494,7 @@ func (a *App) DownloadAddon(id string) error {
 			found.GitHub.Branch,
 			commitHash,
 			found.OverlayOf,
+			config.Get().SkipBackups,
 			progressCallback,
 		)
 
@@ -497,6 +549,8 @@ func (a *App) GetInstalledAddons() ([]InstalledAddonInfo, error) {
 		}
 	}
 
+	hidden := a.fetchHiddenAddons()
+
 	var result []InstalledAddonInfo
 	for _, addon := range installed.Addons {
 		info := InstalledAddonInfo{
@@ -520,6 +574,15 @@ func (a *App) GetInstalledAddons() ([]InstalledAddonInfo, error) {
 		}
 		info.RemovedFromRegistry = !foundInRegistry
 
+		// Installed-but-hidden addons stay visible in the Installed tab so the
+		// user can uninstall them. Updates are suppressed so the user isn't
+		// prompted to install a version that's currently flagged as broken.
+		if hiddenRow, isHidden := hidden[addon.ID]; isHidden {
+			info.IsHidden = true
+			info.HiddenReason = hiddenRow.Reason
+			info.HasUpdate = false
+		}
+
 		result = append(result, info)
 	}
 
@@ -529,6 +592,24 @@ func (a *App) GetInstalledAddons() ([]InstalledAddonInfo, error) {
 func (a *App) GetAddonPath() string {
 	cfg := config.Get()
 	return cfg.AddonPath
+}
+
+// GetSkipBackups returns the dev-only "skip backups on update" flag.
+func (a *App) GetSkipBackups() bool {
+	cfg := config.Get()
+	if cfg == nil {
+		return false
+	}
+	return cfg.SkipBackups
+}
+
+// SetSkipBackups persists the dev-only "skip backups on update" flag.
+func (a *App) SetSkipBackups(skip bool) error {
+	if err := config.SetSkipBackups(skip); err != nil {
+		return err
+	}
+	logger.Infof("config: skip_backups=%v", skip)
+	return nil
 }
 
 func (a *App) SetAddonPath(path string) error {
@@ -1536,6 +1617,185 @@ func (a *App) DenySubmission(id, reason string) error {
 	return a.callDecisionEdgeFn("submission-deny", id, reason)
 }
 
+// HideAddon flags an addon as temporarily hidden so it stops appearing in
+// Browse for non-admins, has updates suppressed for everyone, and surfaces
+// a warning badge on the Installed tab for users who already have it.
+// Server-side RLS gates this to admins; we also re-check client-side to
+// surface a friendlier error.
+func (a *App) HideAddon(slug, reason string) error {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	reason = strings.TrimSpace(reason)
+	if slug == "" {
+		return fmt.Errorf("addon slug is required")
+	}
+	if reason == "" {
+		return fmt.Errorf("reason is required")
+	}
+	if len(reason) > 500 {
+		return fmt.Errorf("reason is too long (max 500 chars)")
+	}
+
+	tokens, err := a.loadSupabaseTokens()
+	if err != nil {
+		return err
+	}
+	if tokens == nil {
+		return fmt.Errorf("not signed in")
+	}
+	if tokens.User.ID == "" {
+		return fmt.Errorf("session has no user id")
+	}
+
+	payload := []map[string]string{{
+		"addon_slug": slug,
+		"hidden_by":  tokens.User.ID,
+		"reason":     reason,
+	}}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequest("POST",
+		supabase.URL+"/rest/v1/hidden_addons",
+		strings.NewReader(string(body)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", supabase.PublishableKey)
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+	req.Header.Set("Content-Type", "application/json")
+	// Prefer "resolution=merge-duplicates" so updating the reason on an
+	// already-hidden addon is idempotent — no need for a separate update path.
+	req.Header.Set("Prefer", "resolution=merge-duplicates")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("hide failed (%d): %s", resp.StatusCode, string(respBody))
+	}
+
+	a.cachedHidden = nil
+	logger.Infof("admin: hid addon %s (reason=%q)", slug, reason)
+	return nil
+}
+
+// UnhideAddon removes the hidden flag. Server-side RLS gates to admins.
+func (a *App) UnhideAddon(slug string) error {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	if slug == "" {
+		return fmt.Errorf("addon slug is required")
+	}
+
+	tokens, err := a.loadSupabaseTokens()
+	if err != nil {
+		return err
+	}
+	if tokens == nil {
+		return fmt.Errorf("not signed in")
+	}
+
+	req, err := http.NewRequest("DELETE",
+		supabase.URL+"/rest/v1/hidden_addons?addon_slug=eq."+url.QueryEscape(slug),
+		nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("apikey", supabase.PublishableKey)
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("unhide failed (%d): %s", resp.StatusCode, string(respBody))
+	}
+
+	a.cachedHidden = nil
+	logger.Infof("admin: unhid addon %s", slug)
+	return nil
+}
+
+// GetHiddenAddons returns the admin-facing list with names + the username of
+// the admin who hid each one. Uses the embedded-resource syntax to join
+// hidden_addons.hidden_by → profiles.discord_username in a single request.
+func (a *App) GetHiddenAddons() ([]HiddenAddonInfo, error) {
+	tokens, err := a.loadSupabaseTokens()
+	if err != nil {
+		return nil, err
+	}
+	if tokens == nil {
+		return nil, fmt.Errorf("not signed in")
+	}
+
+	req, err := http.NewRequest("GET",
+		supabase.URL+"/rest/v1/hidden_addons?select=addon_slug,hidden_at,hidden_by,reason,profiles(discord_username)&order=hidden_at.desc",
+		nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("apikey", supabase.PublishableKey)
+	req.Header.Set("Authorization", "Bearer "+tokens.AccessToken)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("get hidden failed (%d): %s", resp.StatusCode, string(body))
+	}
+
+	var rows []struct {
+		AddonSlug string `json:"addon_slug"`
+		HiddenAt  string `json:"hidden_at"`
+		HiddenBy  string `json:"hidden_by"`
+		Reason    string `json:"reason"`
+		Profiles  *struct {
+			DiscordUsername string `json:"discord_username"`
+		} `json:"profiles"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, err
+	}
+
+	if a.cachedAddons == nil {
+		addons, _ := a.registryClient.GetAllAddons()
+		a.cachedAddons = addons
+	}
+	names := map[string]string{}
+	for _, addon := range a.cachedAddons {
+		names[addon.ID] = addon.Name
+	}
+
+	out := make([]HiddenAddonInfo, 0, len(rows))
+	for _, r := range rows {
+		info := HiddenAddonInfo{
+			AddonSlug:  r.AddonSlug,
+			AddonName:  names[r.AddonSlug],
+			HiddenAt:   r.HiddenAt,
+			HiddenByID: r.HiddenBy,
+			Reason:     r.Reason,
+		}
+		if r.Profiles != nil {
+			info.HiddenByUsername = r.Profiles.DiscordUsername
+		}
+		if info.AddonName == "" {
+			info.AddonName = r.AddonSlug
+		}
+		out = append(out, info)
+	}
+	return out, nil
+}
+
 func (a *App) callDecisionEdgeFn(name, submissionID, reason string) error {
 	tokens, err := a.loadSupabaseTokens()
 	if err != nil {
@@ -1648,9 +1908,12 @@ func (a *App) loadSupabaseTokens() (*auth.Tokens, error) {
 
 func (a *App) RefreshAddons() error {
 	// Stats and ratings always re-fetch on manual Refresh; the registry uses
-	// the conditional path so a 304 from GitHub is essentially free.
+	// the conditional path so a 304 from GitHub is essentially free. Hidden
+	// list re-fetches too so admins get fresh state after Hide/Unhide on a
+	// different device.
 	a.cachedStats = nil
 	a.cachedMyRatings = nil
+	a.cachedHidden = nil
 
 	newETag, entries, err := a.registryClient.GetAllAddonsConditional(a.cachedRegistryETag, a.cachedRegistryEntries)
 	if errors.Is(err, registry.ErrCacheNotModified) {
@@ -1750,6 +2013,79 @@ func (a *App) fetchAddonStats() map[string]addonStatRow {
 	}
 	a.cachedStats = out
 	return out
+}
+
+// hiddenAddonRow is the on-the-wire shape of a row in public.hidden_addons.
+// Internal helper — public callers see HiddenAddonInfo (with the admin's
+// username resolved) or just the IsHidden flag on AddonListItem.
+type hiddenAddonRow struct {
+	AddonSlug string `json:"addon_slug"`
+	HiddenAt  string `json:"hidden_at"`
+	HiddenBy  string `json:"hidden_by"`
+	Reason    string `json:"reason"`
+}
+
+// HiddenAddonInfo is the admin-facing view of a hidden row — the hidden_by
+// uuid is resolved to the admin's discord username for display.
+type HiddenAddonInfo struct {
+	AddonSlug         string `json:"addon_slug"`
+	AddonName         string `json:"addon_name"`
+	HiddenAt          string `json:"hidden_at"`
+	HiddenByID        string `json:"hidden_by_id"`
+	HiddenByUsername  string `json:"hidden_by_username,omitempty"`
+	Reason            string `json:"reason"`
+}
+
+// fetchHiddenAddons pulls the list of currently-hidden addon slugs from
+// Supabase. Cached per session (busted by RefreshAddons and Hide/Unhide).
+func (a *App) fetchHiddenAddons() map[string]hiddenAddonRow {
+	if a.cachedHidden != nil {
+		return a.cachedHidden
+	}
+
+	out := map[string]hiddenAddonRow{}
+	req, err := http.NewRequest("GET",
+		supabase.URL+"/rest/v1/hidden_addons?select=addon_slug,hidden_at,hidden_by,reason",
+		nil)
+	if err != nil {
+		a.cachedHidden = out
+		return out
+	}
+	req.Header.Set("apikey", supabase.PublishableKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		a.cachedHidden = out
+		return out
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		a.cachedHidden = out
+		return out
+	}
+
+	var rows []hiddenAddonRow
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		a.cachedHidden = out
+		return out
+	}
+	for _, r := range rows {
+		out[r.AddonSlug] = r
+	}
+	a.cachedHidden = out
+	return out
+}
+
+// currentUserIsAdmin is a cheap helper for the visibility filters in
+// GetAddons / GetAddonDetails. Returns false on any auth failure — fail
+// closed so a transient error doesn't accidentally surface hidden addons.
+func (a *App) currentUserIsAdmin() bool {
+	user, err := auth.CurrentUser()
+	if err != nil || user == nil {
+		return false
+	}
+	return user.IsAdmin
 }
 
 func (a *App) fetchMyRatings() map[string]int {

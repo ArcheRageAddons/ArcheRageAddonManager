@@ -142,7 +142,7 @@ type ProgressCallback func(current, total int, message string)
 // overlayOf, when non-empty, switches install into overlay mode: extracts on
 // top of the named base addon's folder instead of wiping a fresh folder.
 // Refuses if the named base isn't installed.
-func (m *AddonManager) InstallAddon(addonID, name, version, repoURL, folderPath, branch, commitHash, overlayOf string, progressCallback ProgressCallback) error {
+func (m *AddonManager) InstallAddon(addonID, name, version, repoURL, folderPath, branch, commitHash, overlayOf string, skipBackup bool, progressCallback ProgressCallback) error {
 	// Defence in depth — registry parse already rejects malformed values,
 	// but re-validate so a non-registry caller can't bypass the check.
 	if err := registry.ValidateFolderName(name); err != nil {
@@ -268,9 +268,18 @@ func (m *AddonManager) InstallAddon(addonID, name, version, repoURL, folderPath,
 				_ = os.RemoveAll(stagingDir)
 				return fmt.Errorf("preserve user data: %v", err)
 			}
-			if err := m.BackupAddon(destFolder); err != nil {
-				_ = os.RemoveAll(stagingDir)
-				return fmt.Errorf("backup failed: %v", err)
+			if !skipBackup {
+				if err := m.BackupAddon(destFolder); err != nil {
+					_ = os.RemoveAll(stagingDir)
+					return fmt.Errorf("backup failed: %v", err)
+				}
+			} else {
+				// Dev "skip backups" flag is set — still have to clear the live
+				// folder so the staging rename can land on it.
+				if err := os.RemoveAll(addonDir); err != nil {
+					_ = os.RemoveAll(stagingDir)
+					return fmt.Errorf("clear live folder for skip-backup swap: %v", err)
+				}
 			}
 		}
 

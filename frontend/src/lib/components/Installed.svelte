@@ -155,11 +155,21 @@
                     No longer in registry
                   </span>
                 {/if}
+                {#if addon.is_hidden}
+                  <span class="text-[10px] uppercase tracking-wide text-warning bg-warning/10 border border-warning/40 rounded px-1.5 py-0.5" title="An admin has temporarily hidden this addon — updates are paused.">
+                    Temporarily hidden
+                  </span>
+                {/if}
               </div>
               <div class="text-xs text-text-muted mt-0.5">Installed: {addon.installed_at}</div>
               {#if addon.removed_from_registry}
                 <div class="text-xs text-text-muted mt-1 italic">
                   This addon was removed from the registry. You can keep using it but it won't receive updates.
+                </div>
+              {/if}
+              {#if addon.is_hidden}
+                <div class="text-xs text-warning mt-1 italic whitespace-pre-wrap">
+                  Hidden by an admin: {addon.hidden_reason || 'no reason given.'}
                 </div>
               {/if}
             </div>

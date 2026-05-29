@@ -6,12 +6,14 @@
     ApproveSubmission,
     DenySubmission,
     GetAllUsers,
+    GetHiddenAddons,
+    UnhideAddon,
     OpenURL,
   } from '../../../wailsjs/go/main/App.js';
   import Spinner from './Spinner.svelte';
   import { modalBackdrop, modalContent } from '../motion.js';
 
-  let tab = 'submissions';   // 'submissions' | 'users'
+  let tab = 'submissions';   // 'submissions' | 'users' | 'hidden'
   let submissions = [];
   let loading = true;
   let busy = {};        // map: submission_id -> bool
@@ -23,6 +25,11 @@
   let usersLoading = false;
   let usersLoaded = false;
   let userSearch = '';
+
+  let hidden = [];
+  let hiddenLoading = false;
+  let hiddenLoaded = false;
+  let unhideBusy = {};
 
   $: filteredUsers = userSearch.trim()
     ? users.filter((u) => {
@@ -47,9 +54,34 @@
     usersLoading = false;
   }
 
+  async function loadHidden() {
+    hiddenLoading = true;
+    try {
+      hidden = (await GetHiddenAddons()) || [];
+      hiddenLoaded = true;
+    } catch (e) {
+      showNotification(`Failed to load hidden addons: ${e}`, 'error', 6000);
+      hidden = [];
+    }
+    hiddenLoading = false;
+  }
+
+  async function handleUnhide(slug) {
+    unhideBusy = { ...unhideBusy, [slug]: true };
+    try {
+      await UnhideAddon(slug);
+      hidden = hidden.filter((h) => h.addon_slug !== slug);
+      showNotification(`Unhid ${slug}`, 'success', 3000);
+    } catch (e) {
+      showNotification(`Unhide failed: ${e}`, 'error', 6000);
+    }
+    unhideBusy = { ...unhideBusy, [slug]: false };
+  }
+
   function selectTab(name) {
     tab = name;
     if (name === 'users' && !usersLoaded) loadUsers();
+    if (name === 'hidden' && !hiddenLoaded) loadHidden();
   }
 
   function fmtJoined(s) {
@@ -160,17 +192,21 @@
       <div>
         <h2 class="text-lg font-bold text-text-primary">Admin</h2>
         <p class="text-xs text-text-muted mt-0.5">
-          {tab === 'submissions'
-            ? `${submissions.length} pending submission${submissions.length === 1 ? '' : 's'}.`
-            : `${users.length} user${users.length === 1 ? '' : 's'} registered.`}
+          {#if tab === 'submissions'}
+            {submissions.length} pending submission{submissions.length === 1 ? '' : 's'}.
+          {:else if tab === 'users'}
+            {users.length} user{users.length === 1 ? '' : 's'} registered.
+          {:else}
+            {hidden.length} hidden addon{hidden.length === 1 ? '' : 's'}.
+          {/if}
         </p>
       </div>
       <button
-        on:click={() => tab === 'submissions' ? load() : loadUsers()}
+        on:click={() => tab === 'submissions' ? load() : tab === 'users' ? loadUsers() : loadHidden()}
         title="Refresh"
         class="p-2.5 bg-bg-tertiary hover:bg-border rounded-lg transition-colors text-text-secondary"
       >
-        <svg class="w-4 h-4 {(tab === 'submissions' ? loading : usersLoading) ? 'animate-spin' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="w-4 h-4 {(tab === 'submissions' ? loading : tab === 'users' ? usersLoading : hiddenLoading) ? 'animate-spin' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
         </svg>
@@ -189,6 +225,12 @@
         class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {tab === 'users' ? 'border-accent text-text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}"
       >
         Users
+      </button>
+      <button
+        on:click={() => selectTab('hidden')}
+        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {tab === 'hidden' ? 'border-accent text-text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}"
+      >
+        Hidden
       </button>
     </div>
   </div>
@@ -387,6 +429,52 @@
             </div>
             <div class="text-[10px] text-text-muted flex-shrink-0">
               joined {fmtJoined(u.created_at)}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  {:else if tab === 'hidden'}
+    <!-- Hidden addons tab -->
+    {#if hiddenLoading}
+      <div class="flex items-center justify-center h-32">
+        <div class="text-text-secondary text-sm">Loading...</div>
+      </div>
+    {:else if hidden.length === 0}
+      <div class="flex items-center justify-center h-32">
+        <div class="text-center text-text-secondary">
+          <p class="text-sm">No addons are currently hidden.</p>
+          <p class="text-xs text-text-muted mt-1">Open any addon's details modal to hide it.</p>
+        </div>
+      </div>
+    {:else}
+      <p class="text-xs text-text-muted mb-2 italic">
+        These addons are hidden from non-admin users. Updates are suppressed; existing installs keep working.
+      </p>
+      <div class="space-y-1">
+        {#each hidden as h (h.addon_slug)}
+          <div class="bg-bg-secondary border border-border rounded-lg px-3 py-2.5">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-baseline gap-2 flex-wrap mb-1">
+                  <span class="font-medium text-text-primary">{h.addon_name}</span>
+                  <span class="font-mono text-[11px] text-text-muted">{h.addon_slug}</span>
+                </div>
+                <div class="text-xs text-text-muted mb-1.5">
+                  Hidden {fmtJoined(h.hidden_at)} by {h.hidden_by_username || 'unknown'}
+                </div>
+                <div class="text-xs text-text-secondary whitespace-pre-wrap bg-bg-primary border border-border rounded px-2 py-1.5 leading-relaxed">
+                  {h.reason}
+                </div>
+              </div>
+              <button
+                on:click={() => handleUnhide(h.addon_slug)}
+                disabled={unhideBusy[h.addon_slug]}
+                class="px-3 py-1.5 bg-accent/10 border border-accent hover:bg-accent text-accent hover:text-white rounded-md text-xs font-medium transition-colors disabled:opacity-60 flex-shrink-0"
+                title="Unhide this addon"
+              >
+                {unhideBusy[h.addon_slug] ? 'Unhiding…' : 'Unhide'}
+              </button>
             </div>
           </div>
         {/each}
