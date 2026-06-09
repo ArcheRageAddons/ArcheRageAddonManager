@@ -77,20 +77,23 @@
 
 {#if $showWelcomeModal}
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4"
     transition:modalBackdrop
   >
     <div
-      class="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+      class="bg-bg-secondary border border-border rounded-2xl shadow-modal w-full max-w-2xl max-h-[90vh] overflow-y-auto"
       transition:modalContent
     >
       <!-- Header -->
-      <div class="p-6 border-b border-border flex items-center gap-3">
-        <img src="/logo.png" alt="" class="w-10 h-10" />
+      <div class="px-7 py-6 border-b border-border bg-header-grad flex items-center gap-4">
+        <div class="relative">
+          <div class="absolute inset-0 bg-accent/30 rounded-xl blur-lg"></div>
+          <img src="/logo.png" alt="" class="w-12 h-12 relative rounded-xl" />
+        </div>
         <div>
-          <h2 class="text-xl font-bold text-text-primary">Welcome to ArcheRage Addon Manager</h2>
-          <p class="text-sm text-text-secondary mt-0.5">
-            Choose your ArcheRage <code class="text-text-primary">Addon</code> folder to get started.
+          <h2 class="text-2xl font-bold text-text-primary tracking-tight">Welcome to ArcheRage Addon Manager</h2>
+          <p class="text-sm text-text-secondary mt-1">
+            Choose your ArcheRage <code class="text-text-primary bg-bg-tertiary px-1.5 py-0.5 rounded text-xs">Addon</code> folder to get started.
           </p>
         </div>
       </div>
@@ -193,13 +196,13 @@
       </div>
 
       <!-- Footer -->
-      <div class="p-6 border-t border-border flex justify-end gap-2">
+      <div class="px-7 py-5 border-t border-border bg-bg-primary/40 flex justify-end gap-2">
         <button
           on:click={handleContinue}
           disabled={saving || !selectedPath}
-          class="px-6 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors disabled:opacity-50 text-sm font-medium"
+          class="px-6 py-2.5 bg-accent-grad hover:brightness-110 text-white rounded-xl transition-all disabled:opacity-50 text-sm font-semibold shadow-lift"
         >
-          {saving ? 'Saving...' : 'Continue'}
+          {saving ? 'Saving…' : 'Continue'}
         </button>
       </div>
     </div>

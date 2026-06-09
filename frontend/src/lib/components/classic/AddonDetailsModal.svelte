@@ -1,5 +1,5 @@
 <script>
-  import { selectedAddon, showAddonDetails, showNotification, warningAddon, showWarningModal, downloadProgress, currentUser, uninstallAddon, showUninstallConfirm, selectedAuthor, showAuthorModal, kickOffInstall, installSerially } from '../stores/app.js';
+  import { selectedAddon, showAddonDetails, showNotification, warningAddon, showWarningModal, downloadProgress, currentUser, uninstallAddon, showUninstallConfirm, selectedAuthor, showAuthorModal, kickOffInstall, installSerially } from '../../stores/app.js';
   import {
     OpenURL,
     OpenReadmeLink,
@@ -12,9 +12,9 @@
     GetAddonCommitHistory,
     HideAddon,
     UnhideAddon,
-  } from '../../../wailsjs/go/main/App.js';
-  import { modalBackdrop, modalContent, drawerSlide } from '../motion.js';
-  import { renderReadme } from '../markdown.js';
+  } from '../../../../wailsjs/go/main/App.js';
+  import { modalBackdrop, modalContent } from '../../motion.js';
+  import { renderReadme } from '../../markdown.js';
   import { slide } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
 
@@ -297,8 +297,15 @@
   }
 </script>
 
-{#if $selectedAddon}
-  <div class="h-full overflow-hidden flex flex-col bg-bg-secondary">
+{#if $showAddonDetails && $selectedAddon}
+  <div
+    class="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+    on:click={handleBackdropClick}
+    on:keydown={(e) => e.key === 'Escape' && close()}
+    tabindex="-1"
+    transition:modalBackdrop
+  >
+    <div class="bg-bg-secondary border border-border rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-modal" transition:modalContent>
       <!-- Header -->
       <div class="px-6 py-5 border-b border-border bg-header-grad flex justify-between items-start gap-4">
         <div class="flex items-center gap-4 min-w-0">
@@ -711,6 +718,7 @@
           </button>
         </div>
       </div>
+    </div>
   </div>
 {/if}
 

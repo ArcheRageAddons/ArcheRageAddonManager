@@ -18,6 +18,34 @@ export const showAuthorModal = writable(false);
 export const selectedAuthor = writable('');
 export const submitPrefill = writable(null);
 
+// UI shell preference: 'studio' (icon rail + split list/detail panes) or
+// 'classic' (sidebar + full-width content with modal details). Persisted
+// to localStorage so it survives restarts.
+const LAYOUT_KEY = 'archerage-layout';
+function initialLayout() {
+  try {
+    const raw = localStorage.getItem(LAYOUT_KEY);
+    if (raw === 'classic' || raw === 'studio') return raw;
+  } catch {}
+  return 'studio';
+}
+export const layoutMode = writable(initialLayout());
+layoutMode.subscribe((v) => {
+  try { localStorage.setItem(LAYOUT_KEY, v); } catch {}
+});
+
+// One-time first-run prompt that asks the user which layout they prefer.
+// Once dismissed, never shown again unless the user clears localStorage.
+const LAYOUT_PROMPT_KEY = 'archerage-layout-prompted';
+function initialPromptShown() {
+  try { return localStorage.getItem(LAYOUT_PROMPT_KEY) === '1'; } catch { return false; }
+}
+export const showLayoutChooser = writable(!initialPromptShown());
+export function dismissLayoutChooser() {
+  try { localStorage.setItem(LAYOUT_PROMPT_KEY, '1'); } catch {}
+  showLayoutChooser.set(false);
+}
+
 export const downloadProgress = writable({
     isDownloading: false,
     addonId: null,

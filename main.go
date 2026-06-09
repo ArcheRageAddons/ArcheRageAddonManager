@@ -54,7 +54,7 @@ func main() {
 			Assets:     assets,
 			Middleware: cspMiddleware,
 		},
-		BackgroundColour: &options.RGBA{R: 26, G: 26, B: 46, A: 1},
+		BackgroundColour: &options.RGBA{R: 14, G: 15, B: 18, A: 1},
 		OnStartup:        app.startup,
 		Bind: []interface{}{
 			app,

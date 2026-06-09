@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 html {
-    background-color: #121212;
+    background-color: #0e0f12;
 }
 
 body {
@@ -11,6 +11,9 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
     "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    color: #e6e7eb;
 }
 
 #app {
@@ -19,109 +22,199 @@ body {
 }
 
 ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-    background: #121212;
+    background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #333333;
-    border-radius: 3px;
+    background: #2f3239;
+    border-radius: 4px;
+    border: 2px solid #0e0f12;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #444444;
+    background: #3b3f48;
 }
 
-/* Rendered addon README markdown */
-.markdown-body { color: #b0b0b0; }
+::-webkit-scrollbar-corner {
+    background: transparent;
+}
+
+/* Subtle radial ambient on main canvas — adds depth without distraction */
+.app-canvas-ambient {
+    background:
+        radial-gradient(1200px circle at 8% -10%, rgba(84, 183, 135, 0.05), transparent 50%),
+        radial-gradient(800px circle at 100% 100%, rgba(84, 183, 135, 0.03), transparent 60%);
+}
+
+/* Nav item active indicator pill */
+.nav-active-pill {
+    position: relative;
+}
+.nav-active-pill::before {
+    content: '';
+    position: absolute;
+    left: -8px;
+    top: 6px;
+    bottom: 6px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: linear-gradient(180deg, #6dc99c, #54b787);
+}
+
+/* Vertical resize handle between two panes. Sits in the column flow as a
+   narrow strip; on hover the inner accent line shows; on drag it sticks. */
+.pane-resizer {
+    flex: 0 0 5px;
+    cursor: col-resize;
+    position: relative;
+    background: transparent;
+    border-left: 1px solid #23252b;
+    transition: border-color 120ms ease;
+}
+.pane-resizer::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: -2px;
+    right: -2px;
+}
+.pane-resizer::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 36px;
+    border-radius: 2px;
+    background: #2f3239;
+    opacity: 0;
+    transition: opacity 150ms ease, background 150ms ease;
+}
+.pane-resizer:hover {
+    border-left-color: #54b787;
+}
+.pane-resizer:hover::after,
+.pane-resizer.is-dragging::after {
+    opacity: 1;
+    background: #54b787;
+}
+.pane-resizer.is-dragging {
+    border-left-color: #54b787;
+}
+
+/* Soft elevated card */
+.elev-card {
+    background: linear-gradient(160deg, #1a1c22 0%, #16181d 100%);
+    border: 1px solid #23252b;
+    border-radius: 12px;
+    box-shadow: 0 1px 2px 0 rgba(0,0,0,0.3), 0 1px 6px -1px rgba(0,0,0,0.2);
+}
+
+.elev-card-hover {
+    transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.elev-card-hover:hover {
+    border-color: #2f3239;
+    box-shadow: 0 4px 12px -2px rgba(0,0,0,0.4), 0 2px 4px -2px rgba(0,0,0,0.3);
+}
+
+/* Refined rendered addon README markdown */
+.markdown-body { color: #b6bac3; line-height: 1.65; }
 .markdown-body h1,
 .markdown-body h2,
 .markdown-body h3,
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-    color: #e0e0e0;
+    color: #e6e7eb;
     font-weight: 600;
-    margin: 1.2em 0 0.5em;
+    margin: 1.4em 0 0.5em;
     line-height: 1.3;
+    letter-spacing: -0.01em;
 }
-.markdown-body h1 { font-size: 1.4em; }
-.markdown-body h2 { font-size: 1.25em; }
+.markdown-body h1 { font-size: 1.5em; }
+.markdown-body h2 { font-size: 1.3em; }
 .markdown-body h3 { font-size: 1.1em; }
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 { font-size: 1em; }
 .markdown-body > *:first-child { margin-top: 0; }
-.markdown-body p { margin: 0.6em 0; }
+.markdown-body p { margin: 0.7em 0; }
 .markdown-body ul,
-.markdown-body ol { margin: 0.6em 0; padding-left: 1.5em; }
-.markdown-body li { margin: 0.2em 0; }
+.markdown-body ol { margin: 0.7em 0; padding-left: 1.5em; }
+.markdown-body li { margin: 0.25em 0; }
 .markdown-body li > ul,
 .markdown-body li > ol { margin: 0.2em 0; }
-.markdown-body a { color: #5bb890; text-decoration: underline; }
-.markdown-body a:hover { color: #7fd0aa; }
-.markdown-body strong { color: #e0e0e0; font-weight: 600; }
+.markdown-body a { color: #6dc99c; text-decoration: underline; text-underline-offset: 2px; }
+.markdown-body a:hover { color: #82dab2; }
+.markdown-body strong { color: #e6e7eb; font-weight: 600; }
 .markdown-body em { font-style: italic; }
 .markdown-body code {
-    background: #252525;
-    color: #b8d6c8;
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-size: 0.92em;
+    background: #1f2228;
+    color: #b6dcc8;
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
     font-family: ui-monospace, "SF Mono", Consolas, monospace;
+    border: 1px solid #23252b;
 }
 .markdown-body pre {
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 6px;
-    padding: 10px 12px;
+    background: #0e0f12;
+    border: 1px solid #23252b;
+    border-radius: 8px;
+    padding: 12px 14px;
     overflow-x: auto;
-    margin: 0.8em 0;
+    margin: 0.9em 0;
     font-size: 0.85em;
     line-height: 1.5;
 }
 .markdown-body pre code {
     background: transparent;
     padding: 0;
-    color: #d0d0d0;
+    color: #d0d4dd;
+    border: none;
 }
 .markdown-body blockquote {
     margin: 0.8em 0;
-    padding: 0.4em 0.9em;
-    border-left: 3px solid #4a9d7c;
-    background: rgba(74, 157, 124, 0.06);
-    color: #a0a0a0;
+    padding: 0.5em 1em;
+    border-left: 3px solid #54b787;
+    background: rgba(84, 183, 135, 0.05);
+    border-radius: 0 4px 4px 0;
+    color: #9ca2ad;
 }
 .markdown-body hr {
     border: none;
-    border-top: 1px solid #2a2a2a;
-    margin: 1.2em 0;
+    border-top: 1px solid #23252b;
+    margin: 1.5em 0;
 }
 .markdown-body table {
     border-collapse: collapse;
-    margin: 0.8em 0;
+    margin: 0.9em 0;
     width: 100%;
     font-size: 0.92em;
 }
 .markdown-body th,
 .markdown-body td {
-    border: 1px solid #2a2a2a;
-    padding: 6px 10px;
+    border: 1px solid #23252b;
+    padding: 8px 12px;
     text-align: left;
 }
 .markdown-body th {
-    background: #1a1a1a;
-    color: #e0e0e0;
+    background: #1f2228;
+    color: #e6e7eb;
     font-weight: 600;
 }
 .markdown-body img {
     max-width: 100%;
     height: auto;
-    border-radius: 6px;
-    margin: 0.6em 0;
+    border-radius: 8px;
+    margin: 0.7em 0;
     display: block;
 }

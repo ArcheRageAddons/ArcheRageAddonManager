@@ -38,3 +38,8 @@ export const bannerSlide = reduced
   ? noop
   : (node, params = {}) =>
       fly(node, { duration: 200, y: -16, opacity: 0, easing: cubicOut, ...params });
+
+export const drawerSlide = reduced
+  ? noop
+  : (node, params = {}) =>
+      fly(node, { duration: 220, x: 60, opacity: 0, easing: cubicOut, ...params });

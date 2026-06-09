@@ -341,23 +341,23 @@
 
 {#if $showSubmitModal}
   <div
-    class="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+    class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4"
     on:click={close}
     on:keydown={(e) => e.key === 'Escape' && close()}
     role="presentation"
     transition:modalBackdrop
   >
     <div
-      class="bg-bg-secondary border border-border rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+      class="bg-bg-secondary border border-border rounded-2xl shadow-modal w-full max-w-2xl max-h-[90vh] overflow-y-auto"
       on:click|stopPropagation
       role="dialog"
       aria-modal="true"
       transition:modalContent
     >
       <!-- Header -->
-      <div class="p-5 border-b border-border flex items-center justify-between sticky top-0 bg-bg-secondary z-10">
+      <div class="px-6 py-5 border-b border-border flex items-center justify-between sticky top-0 bg-header-grad z-10">
         <div>
-          <h2 class="text-lg font-bold text-text-primary">
+          <h2 class="text-xl font-bold text-text-primary tracking-tight">
             {isUpdate ? `Update ${form.folder_name || 'addon'}` : 'Submit a new addon'}
           </h2>
           <p class="text-xs text-text-muted mt-0.5">

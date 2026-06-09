@@ -5,6 +5,7 @@
     appInitialized,
     showWelcomeModal,
     showNotification,
+    layoutMode,
   } from './lib/stores/app.js';
   import { GetInstalledAddons, IsFirstRun, LogFromFrontend } from '../wailsjs/go/main/App.js';
 
@@ -31,19 +32,28 @@
   }
   pipeConsoleToLog();
 
-  import Sidebar from './lib/components/Sidebar.svelte';
-  import Browse from './lib/components/Browse.svelte';
-  import Installed from './lib/components/Installed.svelte';
+  // ===== Studio shell components (split-view, icon rail) =====
+  import IconRail from './lib/components/IconRail.svelte';
+  import BrowseStudio from './lib/components/Browse.svelte';
+  import InstalledStudio from './lib/components/Installed.svelte';
+
+  // ===== Classic shell components (sidebar, full-width pages, modal details) =====
+  import Sidebar from './lib/components/classic/Sidebar.svelte';
+  import BrowseClassic from './lib/components/classic/Browse.svelte';
+  import InstalledClassic from './lib/components/classic/Installed.svelte';
+  import AddonDetailsClassic from './lib/components/classic/AddonDetailsModal.svelte';
+  import UpdatesBellClassic from './lib/components/classic/UpdatesBell.svelte';
+
+  // ===== Shared across layouts =====
   import Settings from './lib/components/Settings.svelte';
   import MyAddons from './lib/components/MyAddons.svelte';
   import Admin from './lib/components/Admin.svelte';
   import Changelog from './lib/components/Changelog.svelte';
-  import AddonDetailsModal from './lib/components/AddonDetailsModal.svelte';
   import AuthorModal from './lib/components/AuthorModal.svelte';
-  import UpdatesBell from './lib/components/UpdatesBell.svelte';
   import WarningModal from './lib/components/WarningModal.svelte';
   import UninstallConfirmModal from './lib/components/UninstallConfirmModal.svelte';
   import WelcomeModal from './lib/components/WelcomeModal.svelte';
+  import LayoutChooserModal from './lib/components/LayoutChooserModal.svelte';
   import SubmitAddonModal from './lib/components/SubmitAddonModal.svelte';
   import UpdateBanner from './lib/components/UpdateBanner.svelte';
   import Notification from './lib/components/Notification.svelte';
@@ -52,16 +62,9 @@
 
   onMount(async () => {
     let firstRun = false;
-    try {
-      firstRun = await IsFirstRun();
-    } catch (e) {
-      console.error('Failed to read first-run flag:', e);
-    }
+    try { firstRun = await IsFirstRun(); } catch (e) { console.error('Failed to read first-run flag:', e); }
 
-    if (firstRun) {
-      showWelcomeModal.set(true);
-      return;
-    }
+    if (firstRun) { showWelcomeModal.set(true); return; }
 
     appInitialized.set(true);
 
@@ -86,39 +89,64 @@
 
 <main class="h-screen flex flex-col bg-bg-primary text-text-primary overflow-hidden">
   <UpdateBanner />
-  <div class="flex-1 flex overflow-hidden">
-    <Sidebar />
 
-  <div class="flex-1 flex flex-col overflow-hidden">
-    {#key $currentPage}
-      <div class="flex-1 flex flex-col overflow-hidden" in:pageFade>
-        {#if $currentPage === 'browse'}
-          <Browse />
-        {:else if $currentPage === 'installed'}
-          <Installed />
-        {:else if $currentPage === 'my-addons'}
-          <MyAddons />
-        {:else if $currentPage === 'admin'}
-          <Admin />
-        {:else if $currentPage === 'changelog'}
-          <Changelog />
-        {:else if $currentPage === 'settings'}
-          <Settings />
-        {/if}
+  {#if $layoutMode === 'classic'}
+    <!-- ============ Classic shell: sidebar + full-width pages + floating bell ============ -->
+    <div class="flex-1 flex overflow-hidden">
+      <Sidebar />
+      <div class="flex-1 flex flex-col overflow-hidden">
+        {#key $currentPage}
+          <div class="flex-1 flex flex-col overflow-hidden" in:pageFade>
+            {#if $currentPage === 'browse'}
+              <BrowseClassic />
+            {:else if $currentPage === 'installed'}
+              <InstalledClassic />
+            {:else if $currentPage === 'my-addons'}
+              <MyAddons />
+            {:else if $currentPage === 'admin'}
+              <Admin />
+            {:else if $currentPage === 'changelog'}
+              <Changelog />
+            {:else if $currentPage === 'settings'}
+              <Settings />
+            {/if}
+          </div>
+        {/key}
       </div>
-    {/key}
-  </div>
+    </div>
+    <UpdatesBellClassic />
+    <AddonDetailsClassic />
+  {:else}
+    <!-- ============ Studio shell: icon rail + split-view list/detail ============ -->
+    <div class="flex-1 flex overflow-hidden">
+      <IconRail />
+      <div class="flex-1 flex flex-col overflow-hidden">
+        {#key $currentPage}
+          <div class="flex-1 flex flex-col overflow-hidden" in:pageFade>
+            {#if $currentPage === 'browse'}
+              <BrowseStudio />
+            {:else if $currentPage === 'installed'}
+              <InstalledStudio />
+            {:else if $currentPage === 'my-addons'}
+              <MyAddons />
+            {:else if $currentPage === 'admin'}
+              <Admin />
+            {:else if $currentPage === 'changelog'}
+              <Changelog />
+            {:else if $currentPage === 'settings'}
+              <Settings />
+            {/if}
+          </div>
+        {/key}
+      </div>
+    </div>
+  {/if}
 
-  </div>
-
-  <!-- Floating top-right bell. Page headers reserve `pr-16` so their
-       right-side controls don't collide with it. -->
-  <UpdatesBell />
-  <AddonDetailsModal />
   <AuthorModal />
   <WarningModal />
   <UninstallConfirmModal />
   <WelcomeModal />
+  <LayoutChooserModal />
   <SubmitAddonModal />
   <Notification />
   <DownloadProgress />

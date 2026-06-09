@@ -37,54 +37,54 @@
 <svelte:window on:keydown={handleKeydown} />
 
 {#if $showUninstallConfirm && $uninstallAddon}
-  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100]" on:click={close} transition:modalBackdrop>
+  <div class="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[100]" on:click={close} transition:modalBackdrop>
     <div
-      class="bg-bg-secondary border border-border rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl"
+      class="bg-bg-secondary border border-border rounded-2xl p-6 max-w-md w-full mx-4 shadow-modal"
       on:click|stopPropagation
       transition:modalContent
     >
       <!-- Header -->
-      <div class="flex items-start gap-3 mb-4">
-        <div class="w-10 h-10 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
-          <svg class="w-5 h-5 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <div class="flex items-start gap-3.5 mb-5">
+        <div class="w-11 h-11 rounded-xl bg-red-500/15 border border-red-500/40 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-red-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
           </svg>
         </div>
         <div class="flex-1">
-          <h3 class="text-lg font-bold text-text-primary">Uninstall Addon</h3>
-          <p class="text-sm text-text-muted mt-1">
-            Are you sure you want to uninstall <span class="text-text-primary font-medium">{$uninstallAddon.name}</span>?
+          <h3 class="text-lg font-bold text-text-primary tracking-tight">Uninstall addon?</h3>
+          <p class="text-sm text-text-muted mt-1 leading-relaxed">
+            <span class="text-text-primary font-semibold">{$uninstallAddon.name}</span> will be removed from your game directory.
           </p>
         </div>
       </div>
 
       <!-- Message -->
-      <div class="bg-bg-tertiary border border-border rounded-lg p-3 mb-6">
-        <p class="text-xs text-text-muted">
-          This will remove all addon files from your game directory. This action cannot be undone.
+      <div class="bg-bg-primary/60 border border-border rounded-xl p-3.5 mb-6">
+        <p class="text-xs text-text-secondary leading-relaxed">
+          All addon files in the install folder will be deleted. This can't be undone — you'll have to reinstall from Browse if you change your mind.
         </p>
       </div>
 
       <!-- Actions -->
-      <div class="flex items-center gap-3 justify-end">
+      <div class="flex items-center gap-2 justify-end">
         <button
           on:click={close}
           disabled={uninstalling}
-          class="px-4 py-2.5 bg-bg-tertiary hover:bg-border rounded-lg transition-colors disabled:opacity-50 text-sm text-text-primary"
+          class="px-4 py-2.5 bg-bg-tertiary hover:bg-bg-elevated border border-border rounded-lg transition-colors disabled:opacity-50 text-sm text-text-secondary hover:text-text-primary"
         >
           Cancel
         </button>
         <button
           on:click={handleConfirm}
           disabled={uninstalling}
-          class="px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2 text-sm"
+          class="px-4 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-all disabled:opacity-50 flex items-center gap-2 text-sm font-semibold shadow-soft"
         >
           {#if uninstalling}
             <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24">
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
             </svg>
-            Uninstalling...
+            Uninstalling…
           {:else}
             Uninstall
           {/if}

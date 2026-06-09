@@ -101,31 +101,34 @@
 </script>
 
 {#if $downloadProgress.isDownloading}
-  <div class="fixed inset-0 bg-black/70 flex items-center justify-center z-[100]" transition:modalBackdrop>
-    <div class="bg-bg-secondary border border-border rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl" transition:modalContent>
-      <h3 class="text-lg font-bold text-text-primary mb-4">
-        Downloading {$downloadProgress.addonName || 'Addon'}
-      </h3>
+  <div class="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-[100]" transition:modalBackdrop>
+    <div class="bg-bg-secondary border border-border rounded-2xl p-6 max-w-md w-full mx-4 shadow-modal" transition:modalContent>
+      <div class="flex items-center gap-3 mb-5">
+        <div class="relative w-11 h-11 rounded-xl bg-accent/15 border border-accent/40 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-accent animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="text-base font-bold text-text-primary tracking-tight">Installing {$downloadProgress.addonName || 'addon'}</h3>
+          <p class="text-xs text-text-muted mt-0.5">Hold tight — this only takes a moment.</p>
+        </div>
+      </div>
 
-      <div class="space-y-3">
+      <div class="space-y-2.5">
         <!-- Progress Message -->
-        <div class="flex justify-between items-center text-sm">
-          <span class="text-text-muted">{$downloadProgress.message}</span>
-          <span class="text-text-primary font-medium">{$downloadProgress.current}%</span>
+        <div class="flex justify-between items-center text-xs">
+          <span class="text-text-secondary">{$downloadProgress.message}</span>
+          <span class="text-accent font-mono font-semibold">{$downloadProgress.current}%</span>
         </div>
 
         <!-- Progress Bar -->
-        <div class="w-full bg-bg-tertiary rounded-full h-3 overflow-hidden">
+        <div class="w-full bg-bg-primary/60 border border-border rounded-full h-2 overflow-hidden">
           <div
-            class="bg-accent h-full transition-all duration-200 ease-out"
+            class="h-full transition-all duration-200 ease-out bg-accent-grad"
             style="width: {$downloadProgress.current}%"
           ></div>
         </div>
-
-        <!-- Note -->
-        <p class="text-xs text-text-muted text-center mt-4">
-          Please wait while the addon is being downloaded and installed...
-        </p>
       </div>
     </div>
   </div>

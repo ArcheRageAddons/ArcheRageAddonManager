@@ -73,15 +73,15 @@
 
 {#if $showAuthorModal && $selectedAuthor}
   <div
-    class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
+    class="fixed inset-0 bg-black/75 backdrop-blur-sm flex items-center justify-center z-50 p-4"
     on:click={handleBackdropClick}
     on:keydown={(e) => e.key === 'Escape' && close()}
     tabindex="-1"
     transition:modalBackdrop
   >
-    <div class="bg-bg-secondary border border-border rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col shadow-2xl" transition:modalContent>
+    <div class="bg-bg-secondary border border-border rounded-2xl max-w-2xl w-full max-h-[85vh] overflow-hidden flex flex-col shadow-modal" transition:modalContent>
       <!-- Header -->
-      <div class="p-5 border-b border-border flex justify-between items-start">
+      <div class="px-6 py-5 border-b border-border bg-header-grad flex justify-between items-start">
         <div class="min-w-0">
           <div class="flex items-center gap-2 flex-wrap">
             <h2 class="text-lg font-bold text-text-primary truncate">{$selectedAuthor}</h2>

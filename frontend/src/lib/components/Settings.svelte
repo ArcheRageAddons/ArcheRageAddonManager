@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { showNotification } from '../stores/app.js';
+  import { showNotification, layoutMode } from '../stores/app.js';
   import {
     GetAddonPath,
     SetAddonPath,
@@ -81,30 +81,35 @@
 
 <div class="h-full flex flex-col overflow-hidden">
   <!-- Header + tabs -->
-  <div class="p-4 pr-16 border-b border-border bg-bg-secondary">
-    <h2 class="text-lg font-bold text-text-primary">Settings</h2>
-    <div class="flex gap-1 mt-3 border-b border-border -mb-4">
+  <div class="px-8 pt-7 pb-0 border-b border-border relative overflow-hidden">
+    <div class="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-accent/8 blur-[100px] pointer-events-none"></div>
+    <div class="relative max-w-3xl mx-auto">
+    <div>
+      <h1 class="text-[28px] font-bold text-text-primary tracking-tight leading-tight">Settings</h1>
+      <p class="text-sm text-text-muted mt-1">Configure your install location, browse help, and developer options.</p>
+    </div>
+    <div class="flex gap-1 mt-4 -mb-px">
       <button
         on:click={() => (tab = 'downloads')}
-        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {tab === 'downloads' ? 'border-accent text-text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}"
+        class="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors {tab === 'downloads' ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-secondary'}"
       >
         Downloads
       </button>
       <button
         on:click={() => (tab = 'how-to')}
-        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {tab === 'how-to' ? 'border-accent text-text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}"
+        class="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors {tab === 'how-to' ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-secondary'}"
       >
         How to
       </button>
       <button
         on:click={() => (tab = 'faq')}
-        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors {tab === 'faq' ? 'border-accent text-text-primary' : 'border-transparent text-text-muted hover:text-text-secondary'}"
+        class="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors {tab === 'faq' ? 'border-accent text-accent' : 'border-transparent text-text-muted hover:text-text-secondary'}"
       >
         FAQ
       </button>
       <button
         on:click={() => (tab = 'dev')}
-        class="px-4 py-2 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 {tab === 'dev' ? 'border-warning text-warning' : 'border-transparent text-text-muted hover:text-warning'}"
+        class="px-4 py-2.5 text-[13px] font-medium border-b-2 transition-colors flex items-center gap-1.5 {tab === 'dev' ? 'border-warning text-warning' : 'border-transparent text-text-muted hover:text-warning'}"
         title="Settings for addon authors only"
       >
         <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -113,13 +118,99 @@
         Dev Settings
       </button>
     </div>
+    </div>
   </div>
 
   <!-- Body -->
   <div class="flex-1 overflow-y-auto p-6">
-    <div class="max-w-2xl mx-auto w-full space-y-6">
+    <div class="max-w-3xl mx-auto w-full space-y-5">
 
       {#if tab === 'downloads'}
+        <!-- Layout chooser -->
+        <div class="bg-bg-secondary border border-border rounded-lg p-6">
+          <h3 class="font-medium text-text-primary mb-1">Layout</h3>
+          <p class="text-xs text-text-muted mb-4">Pick how the manager arranges things. Your choice is saved between sessions.</p>
+
+          <div class="grid grid-cols-2 gap-3">
+            <!-- Studio option -->
+            <button
+              type="button"
+              on:click={() => layoutMode.set('studio')}
+              class="text-left rounded-xl border-2 transition-all p-3 {$layoutMode === 'studio' ? 'border-accent bg-accent/10' : 'border-border bg-bg-primary/40 hover:border-border-strong'}"
+            >
+              <!-- Mini preview -->
+              <div class="aspect-[16/10] rounded-lg overflow-hidden border border-border bg-bg-primary mb-3 flex">
+                <div class="w-[18%] bg-bg-sidebar flex flex-col items-center gap-1.5 py-2">
+                  <div class="w-3 h-3 rounded bg-accent"></div>
+                  <div class="w-3 h-3 rounded bg-text-muted/40"></div>
+                  <div class="w-3 h-3 rounded bg-text-muted/40"></div>
+                </div>
+                <div class="w-[38%] border-r border-l border-border bg-bg-primary flex flex-col gap-1.5 p-1.5">
+                  <div class="h-1.5 w-12 bg-text-muted/30 rounded"></div>
+                  <div class="h-2.5 w-full bg-accent/30 rounded"></div>
+                  <div class="h-2.5 w-full bg-text-muted/15 rounded"></div>
+                  <div class="h-2.5 w-full bg-text-muted/15 rounded"></div>
+                  <div class="h-2.5 w-full bg-text-muted/15 rounded"></div>
+                </div>
+                <div class="flex-1 bg-bg-secondary flex flex-col gap-2 p-2">
+                  <div class="h-3 w-1/2 bg-accent/40 rounded"></div>
+                  <div class="h-1 w-3/4 bg-text-muted/25 rounded"></div>
+                  <div class="h-1 w-2/3 bg-text-muted/20 rounded"></div>
+                  <div class="h-1 w-3/5 bg-text-muted/20 rounded"></div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-[13px] font-semibold text-text-primary">Studio</div>
+                  <div class="text-[10px] text-text-muted">Icon rail · list + live detail pane</div>
+                </div>
+                {#if $layoutMode === 'studio'}
+                  <span class="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-accent text-white rounded-full">Active</span>
+                {/if}
+              </div>
+            </button>
+
+            <!-- Classic option -->
+            <button
+              type="button"
+              on:click={() => layoutMode.set('classic')}
+              class="text-left rounded-xl border-2 transition-all p-3 {$layoutMode === 'classic' ? 'border-accent bg-accent/10' : 'border-border bg-bg-primary/40 hover:border-border-strong'}"
+            >
+              <!-- Mini preview -->
+              <div class="aspect-[16/10] rounded-lg overflow-hidden border border-border bg-bg-primary mb-3 flex">
+                <div class="w-[28%] bg-bg-sidebar flex flex-col gap-1 p-1.5">
+                  <div class="h-2 w-3/4 bg-accent/40 rounded"></div>
+                  <div class="h-2 w-full bg-text-muted/25 rounded mt-1"></div>
+                  <div class="h-2 w-full bg-text-muted/15 rounded"></div>
+                  <div class="h-2 w-full bg-text-muted/15 rounded"></div>
+                </div>
+                <div class="flex-1 bg-bg-secondary flex flex-col gap-2 p-2">
+                  <div class="h-3 w-1/3 bg-accent/40 rounded"></div>
+                  <div class="flex gap-1.5 mt-0.5">
+                    <div class="flex-1 h-6 bg-bg-primary/60 border border-border rounded"></div>
+                    <div class="flex-1 h-6 bg-bg-primary/60 border border-border rounded"></div>
+                    <div class="flex-1 h-6 bg-bg-primary/60 border border-border rounded"></div>
+                  </div>
+                  <div class="flex gap-1.5">
+                    <div class="flex-1 h-6 bg-bg-primary/60 border border-border rounded"></div>
+                    <div class="flex-1 h-6 bg-bg-primary/60 border border-border rounded"></div>
+                    <div class="flex-1 h-6 bg-bg-primary/60 border border-border rounded"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="flex items-center justify-between">
+                <div>
+                  <div class="text-[13px] font-semibold text-text-primary">Classic</div>
+                  <div class="text-[10px] text-text-muted">Sidebar · full-width pages · modal detail</div>
+                </div>
+                {#if $layoutMode === 'classic'}
+                  <span class="px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-accent text-white rounded-full">Active</span>
+                {/if}
+              </div>
+            </button>
+          </div>
+        </div>
+
         <div class="bg-bg-secondary border border-border rounded-lg p-6">
           <h3 class="font-medium text-text-primary mb-2">Addon Installation Path</h3>
           <p class="text-sm text-text-muted mb-4">

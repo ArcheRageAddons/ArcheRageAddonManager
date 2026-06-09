@@ -195,10 +195,12 @@
 
 <div class="h-full flex flex-col overflow-hidden">
   <!-- Header -->
-  <div class="flex justify-between items-center p-4 pr-16 border-b border-border bg-bg-secondary">
+  <div class="px-8 pt-7 pb-5 border-b border-border relative overflow-hidden">
+    <div class="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-accent/8 blur-[100px] pointer-events-none"></div>
+    <div class="relative max-w-6xl mx-auto flex justify-between items-baseline">
     <div>
-      <h2 class="text-lg font-bold text-text-primary">My Addons</h2>
-      <p class="text-xs text-text-muted mt-0.5">
+      <h1 class="text-[28px] font-bold text-text-primary tracking-tight leading-tight">My Addons</h1>
+      <p class="text-sm text-text-muted mt-1">
         Your published addons and submission history.
       </p>
     </div>
@@ -206,9 +208,9 @@
       <button
         on:click={load}
         title="Refresh"
-        class="p-2.5 bg-bg-tertiary hover:bg-border rounded-lg transition-colors text-text-secondary"
+        class="p-2 bg-bg-tertiary/60 hover:bg-bg-tertiary border border-border rounded-lg transition-all text-text-secondary hover:text-text-primary"
       >
-        <svg class="w-4 h-4 {loading ? 'animate-spin' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg class="w-3.5 h-3.5 {loading ? 'animate-spin' : ''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M23 4v6h-6M1 20v-6h6"/>
           <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
         </svg>
@@ -223,10 +225,11 @@
         Submit New Addon
       </button>
     </div>
+    </div>
   </div>
 
   <!-- Body -->
-  <div class="flex-1 overflow-y-auto p-4 space-y-6">
+  <div class="flex-1 overflow-y-auto px-8 py-6 max-w-6xl mx-auto w-full space-y-6">
     {#if loading}
       <div class="flex items-center justify-center h-64">
         <div class="text-text-secondary text-sm">Loading...</div>

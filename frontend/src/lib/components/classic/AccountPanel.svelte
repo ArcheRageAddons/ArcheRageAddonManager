@@ -1,13 +1,13 @@
 <script>
   import { onMount } from 'svelte';
-  import { currentUser, currentPage, showNotification } from '../stores/app.js';
+  import { currentUser, currentPage, showNotification } from '../../stores/app.js';
   import {
     LoginWithDiscord,
     Logout,
     GetCurrentUser,
-  } from '../../../wailsjs/go/main/App.js';
-  import { EventsOn } from '../../../wailsjs/runtime/runtime.js';
-  import Spinner from './Spinner.svelte';
+  } from '../../../../wailsjs/go/main/App.js';
+  import { EventsOn } from '../../../../wailsjs/runtime/runtime.js';
+  import Spinner from '../Spinner.svelte';
 
   let busy = false;
 

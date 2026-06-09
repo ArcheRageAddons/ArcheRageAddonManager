@@ -1,5 +1,5 @@
 <script>
-  import { showNotification, warningAddon, showWarningModal, downloadProgress, uninstallAddon, showUninstallConfirm, selectedAuthor, showAuthorModal, kickOffInstall } from '../stores/app.js';
+  import { showNotification, warningAddon, showWarningModal, downloadProgress, uninstallAddon, showUninstallConfirm, selectedAuthor, showAuthorModal, kickOffInstall } from '../../stores/app.js';
 
   export let addon;
 

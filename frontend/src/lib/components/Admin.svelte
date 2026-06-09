@@ -187,11 +187,13 @@
 
 <div class="h-full flex flex-col overflow-hidden">
   <!-- Header -->
-  <div class="p-4 pr-16 border-b border-border bg-bg-secondary">
-    <div class="flex justify-between items-center">
+  <div class="px-8 pt-7 pb-0 border-b border-border relative overflow-hidden">
+    <div class="absolute -top-20 -right-20 w-72 h-72 rounded-full bg-accent/8 blur-[100px] pointer-events-none"></div>
+    <div class="relative max-w-6xl mx-auto">
+    <div class="flex justify-between items-baseline">
       <div>
-        <h2 class="text-lg font-bold text-text-primary">Admin</h2>
-        <p class="text-xs text-text-muted mt-0.5">
+        <h1 class="text-[28px] font-bold text-text-primary tracking-tight leading-tight">Admin</h1>
+        <p class="text-sm text-text-muted mt-1">
           {#if tab === 'submissions'}
             {submissions.length} pending submission{submissions.length === 1 ? '' : 's'}.
           {:else if tab === 'users'}
@@ -233,10 +235,11 @@
         Hidden
       </button>
     </div>
+    </div>
   </div>
 
   <!-- Body -->
-  <div class="flex-1 overflow-y-auto p-4">
+  <div class="flex-1 overflow-y-auto px-8 py-6 max-w-6xl mx-auto w-full">
   {#if tab === 'submissions'}
     {#if loading}
       <div class="flex items-center justify-center h-full">
