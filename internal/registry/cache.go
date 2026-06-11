@@ -15,7 +15,9 @@ import (
 )
 
 const (
-	cacheVersion = 1
+	// Bump to invalidate every user's on-disk cache after a breaking change to
+	// the cached shape or to the parsing semantics.
+	cacheVersion = 2
 	// Defensive cap so a corrupted / hostile cache file can't OOM the parser.
 	maxCacheBytes = 10 * 1024 * 1024
 )
@@ -110,6 +112,7 @@ func (r *RegistryClient) GetAllAddonsConditional(prevETag string, prevEntries []
 	}
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+	req.Header.Set("Cache-Control", "no-cache")
 	r.addAuthHeader(req)
 	if prevETag != "" {
 		req.Header.Set("If-None-Match", prevETag)

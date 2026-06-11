@@ -1297,6 +1297,129 @@ func (a *App) SubmitAddon(r SubmitAddonRequest) (*SubmitAddonResult, error) {
 // caller's rows, but the `admins read all subs` policy lets admins see
 // every row in the table. We don't want the My Addons page to balloon
 // to "every submission ever" for maintainers.
+// QuickEditFields is the metadata-only quick-edit request. Pointer fields
+// are tri-state: nil = leave alone, non-nil = set. The two slice fields use
+// HasKeywords / HasDependencies booleans to disambiguate clear-to-empty
+// (true + nil/empty) from leave-alone (false).
+type QuickEditFields struct {
+	Name            *string  `json:"name,omitempty"`
+	Author          *string  `json:"author,omitempty"`
+	Description     *string  `json:"description,omitempty"`
+	Category        *string  `json:"category,omitempty"`
+	Icon            *string  `json:"icon,omitempty"`
+	Keywords        []string `json:"keywords,omitempty"`
+	Dependencies    []string `json:"dependencies,omitempty"`
+	HasKeywords     bool     `json:"_has_keywords,omitempty"`
+	HasDependencies bool     `json:"_has_dependencies,omitempty"`
+}
+
+type QuickEditResult struct {
+	OK     bool     `json:"ok"`
+	Slug   string   `json:"slug"`
+	Fields []string `json:"fields"`
+}
+
+func (a *App) QuickEditAddon(slug string, fields QuickEditFields) (*QuickEditResult, error) {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	if slug == "" {
+		return nil, fmt.Errorf("addon slug is required")
+	}
+
+	tokens, err := a.loadSupabaseTokens()
+	if err != nil {
+		return nil, err
+	}
+	if tokens == nil {
+		return nil, fmt.Errorf("not signed in")
+	}
+
+	ghToken, _ := github_auth.LoadToken()
+	if ghToken == "" {
+		return nil, fmt.Errorf("connect GitHub before editing — the manager needs your GitHub token to re-verify ownership")
+	}
+
+	payloadFields := map[string]any{}
+	if fields.Name != nil {
+		payloadFields["name"] = *fields.Name
+	}
+	if fields.Author != nil {
+		payloadFields["author"] = *fields.Author
+	}
+	if fields.Description != nil {
+		payloadFields["description"] = *fields.Description
+	}
+	if fields.Category != nil {
+		payloadFields["category"] = *fields.Category
+	}
+	if fields.Icon != nil {
+		payloadFields["icon"] = *fields.Icon
+	}
+	if fields.HasKeywords {
+		if fields.Keywords == nil {
+			payloadFields["keywords"] = []string{}
+		} else {
+			payloadFields["keywords"] = fields.Keywords
+		}
+	}
+	if fields.HasDependencies {
+		if fields.Dependencies == nil {
+			payloadFields["dependencies"] = []string{}
+		} else {
+			payloadFields["dependencies"] = fields.Dependencies
+		}
+	}
+	if len(payloadFields) == 0 {
+		return nil, fmt.Errorf("no fields to update")
+	}
+
+	status, body, err := github_auth.PostJSONWithTimeout(
+		supabase.URL+"/functions/v1/submission-quick-edit",
+		map[string]any{
+			"addon_slug":   slug,
+			"github_token": ghToken,
+			"fields":       payloadFields,
+		},
+		map[string]string{
+			"apikey":        supabase.PublishableKey,
+			"Authorization": "Bearer " + tokens.AccessToken,
+		},
+		60*time.Second,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("quick edit: %w", err)
+	}
+
+	var resp struct {
+		OK     bool     `json:"ok"`
+		Slug   string   `json:"slug"`
+		Fields []string `json:"fields"`
+		Error  string   `json:"error"`
+	}
+	_ = json.Unmarshal(body, &resp)
+
+	if status != 200 {
+		if resp.Error != "" {
+			return nil, fmt.Errorf("%s", resp.Error)
+		}
+		return nil, fmt.Errorf("quick edit failed (%d): %s", status, string(body))
+	}
+
+	// Bust the listing ETag so the next refresh re-fetches the contents
+	// listing. Per-YAML entries stay cached — only the edited file's blob SHA
+	// changes, so the conditional refresh refetches one YAML, not all of them.
+	a.cachedRegistryETag = ""
+
+	logger.Infof("quick edit: %s (%d field%s)", slug, len(resp.Fields), pluralS(len(resp.Fields)))
+	return &QuickEditResult{OK: resp.OK, Slug: resp.Slug, Fields: resp.Fields}, nil
+}
+
+func pluralS(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
 func (a *App) GetMySubmissions() ([]SubmissionRow, error) {
 	tokens, err := a.loadSupabaseTokens()
 	if err != nil {
@@ -1936,6 +2059,7 @@ func (a *App) RefreshAddons() error {
 	a.cachedStats = nil
 	a.cachedMyRatings = nil
 	a.cachedHidden = nil
+	a.cachedReadmes = nil
 
 	newETag, entries, err := a.registryClient.GetAllAddonsConditional(a.cachedRegistryETag, a.cachedRegistryEntries)
 	if errors.Is(err, registry.ErrCacheNotModified) {
@@ -1955,6 +2079,10 @@ func (a *App) RefreshAddons() error {
 		Entries:   entries,
 	}); err != nil {
 		logger.Warnf("registry: save cache failed: %v", err)
+	}
+
+	if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "registry:refreshed")
 	}
 	return nil
 }
@@ -2434,10 +2562,11 @@ type AddonReadme struct {
 
 const maxReadmeBytes = 100 * 1024
 
-// GetAddonReadme fetches README.md from the addon's pinned source commit.
-// Returns an empty struct (not an error) when no README exists or any
-// fetch error happens — the frontend silently falls back to the YAML
-// description. Cached per session.
+// GetAddonReadme fetches README.md from the addon's source repo at branch
+// HEAD — so authors can update their README without going through the
+// version-submission flow. The pinned commit is used as a fallback when no
+// branch is set in the YAML (legacy listings). Returns an empty struct when
+// no README exists or any fetch error happens. Cached per session.
 func (a *App) GetAddonReadme(id string) (*AddonReadme, error) {
 	if cached, ok := a.cachedReadmes[id]; ok {
 		return cached, nil
@@ -2468,10 +2597,8 @@ func (a *App) GetAddonReadme(id string) (*AddonReadme, error) {
 	}
 
 	ref := found.GitHub.Branch
-	if found.GitHub.Commit != "" {
-		ref = found.GitHub.Commit
-	} else if found.GitHub.Tag != "" {
-		ref = found.GitHub.Tag
+	if ref == "" {
+		ref = "main"
 	}
 
 	subPath := strings.Trim(found.GitHub.Path, "/")
@@ -2481,13 +2608,14 @@ func (a *App) GetAddonReadme(id string) (*AddonReadme, error) {
 	} else {
 		readmePath = "README.md"
 	}
-	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo, ref, readmePath)
+	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s?_=%d", owner, repo, ref, readmePath, time.Now().UnixNano())
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return &AddonReadme{}, nil
 	}
 	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+	req.Header.Set("Cache-Control", "no-cache")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

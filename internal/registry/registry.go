@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -32,6 +33,9 @@ const (
 var (
 	folderNameRe = regexp.MustCompile(`^[A-Za-z0-9]{1,64}$`)
 	githubPathRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]{0,254}$`)
+	// Unquotes `has_dangerous_files: 'false'` left behind by an early version
+	// of submission-quick-edit — yaml.v3 won't decode a quoted string into bool.
+	quotedBoolRe = regexp.MustCompile(`(?m)^(has_dangerous_files:\s*)['"](true|false)['"]\s*$`)
 )
 
 // Public so the addon package can re-validate at install time.
@@ -150,6 +154,7 @@ func (r *RegistryClient) GetAllAddons() ([]Addon, error) {
 
 	req.Header.Set("Accept", "application/vnd.github.v3+json")
 	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+	req.Header.Set("Cache-Control", "no-cache")
 	r.addAuthHeader(req)
 
 	resp, err := r.client.Do(req)
@@ -214,38 +219,15 @@ func (r *RegistryClient) GetAllAddons() ([]Addon, error) {
 	return addons, nil
 }
 
-// raw.githubusercontent.com doesn't count against the GitHub API rate limit,
-// so a Browse refresh costs 1 API call (the listing) regardless of the
-// number of addons.
 func (r *RegistryClient) fetchAddonFromFile(content GitHubContent) (Addon, error) {
 	var addon Addon
 
-	url := content.DownloadURL
-	if url == "" {
-		url = fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s",
-			r.registryOwner, r.registryRepo, r.registryBranch, content.Path)
-	}
-
-	req, err := http.NewRequest("GET", url, nil)
+	body, err := r.fetchYAMLBytes(content)
 	if err != nil {
 		return addon, err
 	}
-	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
 
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return addon, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return addon, fmt.Errorf("failed to download %s: %s", content.Name, resp.Status)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return addon, err
-	}
+	body = quotedBoolRe.ReplaceAll(body, []byte("${1}${2}"))
 
 	if err := yaml.Unmarshal(body, &addon); err != nil {
 		return addon, fmt.Errorf("invalid YAML: %v", err)
@@ -287,6 +269,75 @@ func (r *RegistryClient) fetchAddonFromFile(content GitHubContent) (Addon, error
 	}
 
 	return addon, nil
+}
+
+// fetchYAMLBytes pulls a registry YAML via the Git Blob API — it's
+// content-addressed by SHA, so unlike raw.githubusercontent.com (which can
+// serve a stale copy for ~5 min after a commit) every fetch is guaranteed
+// fresh. Raw is kept as a fallback for legacy listings without a SHA.
+func (r *RegistryClient) fetchYAMLBytes(content GitHubContent) ([]byte, error) {
+	if content.SHA != "" {
+		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/blobs/%s",
+			r.registryOwner, r.registryRepo, content.SHA)
+		req, err := http.NewRequest("GET", url, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Accept", "application/vnd.github.v3+json")
+		req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+		r.addAuthHeader(req)
+
+		resp, err := r.client.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			return nil, fmt.Errorf("blob fetch %s: %s", content.SHA[:8], resp.Status)
+		}
+
+		var blob struct {
+			Content  string `json:"content"`
+			Encoding string `json:"encoding"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&blob); err != nil {
+			return nil, fmt.Errorf("blob decode %s: %w", content.SHA[:8], err)
+		}
+		if blob.Encoding != "base64" {
+			return nil, fmt.Errorf("blob %s: unexpected encoding %q", content.SHA[:8], blob.Encoding)
+		}
+		decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(blob.Content, "\n", ""))
+		if err != nil {
+			return nil, fmt.Errorf("blob %s base64: %w", content.SHA[:8], err)
+		}
+		return decoded, nil
+	}
+
+	url := content.DownloadURL
+	if url == "" {
+		url = fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s",
+			r.registryOwner, r.registryRepo, r.registryBranch, content.Path)
+	}
+	url += fmt.Sprintf("?_=%d", time.Now().UnixNano())
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+	req.Header.Set("Cache-Control", "no-cache")
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("raw fetch %s: %s", content.Name, resp.Status)
+	}
+	return io.ReadAll(resp.Body)
 }
 
 func ParseRepoURL(repoURL string) (owner, repo string, err error) {

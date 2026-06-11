@@ -1,5 +1,6 @@
 <script>
   import { onMount, onDestroy } from 'svelte';
+  import { EventsOn } from '../../../wailsjs/runtime/runtime.js';
   import {
     currentUser,
     showSubmitModal,
@@ -13,25 +14,42 @@
     DeleteAddon,
     WithdrawSubmission,
     OpenURL,
+    GetAddons,
   } from '../../../wailsjs/go/main/App.js';
   import Spinner from './Spinner.svelte';
+  import QuickEditModal from './QuickEditModal.svelte';
   import { modalBackdrop, modalContent } from '../motion.js';
 
+  let quickEditTarget = null;
+
   let submissions = [];
+  // Current registry values keyed by slug. `submissions.yaml_content` is the
+  // frozen historical submission; we display the live registry copy so Quick
+  // Edit changes show up.
+  let registryBySlug = {};
   let loading = true;
   let updating = {};
   let deleting = {};
   let withdrawing = {};
   let historyOpen = true;
-  let deleteConfirmTarget = null;   // { addon, displayName } — scary delete-addon flow
+  let deleteConfirmTarget = null;
   let typedConfirm = '';
-  let withdrawTarget = null;         // submission row currently asking to withdraw
-  let clearHistoryConfirm = false;   // toggles the "Clear all" confirm modal
+  let withdrawTarget = null;
+  let clearHistoryConfirm = false;
 
   async function load() {
     loading = true;
     try {
-      submissions = (await GetMySubmissions()) || [];
+      const [subs, reg] = await Promise.all([
+        GetMySubmissions(),
+        GetAddons().catch(() => []),
+      ]);
+      submissions = subs || [];
+      const next = {};
+      for (const a of reg || []) {
+        if (a?.id) next[a.id.toLowerCase()] = a;
+      }
+      registryBySlug = next;
     } catch (e) {
       showNotification(`Failed to load submissions: ${e}`, 'error');
       submissions = [];
@@ -41,13 +59,17 @@
 
   function onSubmissionCreated() { load(); }
 
+  let offRegistry = null;
+
   onMount(() => {
     load();
     window.addEventListener('submission-created', onSubmissionCreated);
+    offRegistry = EventsOn('registry:refreshed', () => load());
   });
 
   onDestroy(() => {
     window.removeEventListener('submission-created', onSubmissionCreated);
+    if (offRegistry) offRegistry();
   });
 
   // One entry per slug — the most recent approved submission.
@@ -102,6 +124,21 @@
     updating = { ...updating, [s.id]: true };
     try {
       const data = await BuildUpdateForm(s.yaml_content, s.github_repo, s.github_path || '');
+      // Overlay live registry values so any Quick Edits made since the last
+      // submission show up in the form. Version + github.* must still come
+      // from the historical YAML — those are tier-2-only.
+      const reg = registryBySlug[(s.addon_slug || '').toLowerCase()];
+      if (reg) {
+        if (reg.name) data.name = reg.name;
+        if (reg.author_name) data.author = reg.author_name;
+        if (reg.description != null) data.description = reg.description;
+        if (reg.category) data.category = reg.category;
+        if (reg.icon != null) data.icon = reg.icon;
+        if (reg.keywords) data.keywords = reg.keywords;
+        if (reg.dependencies) {
+          data.dependencies = reg.dependencies.map((d) => typeof d === 'string' ? d : d.id);
+        }
+      }
       submitPrefill.set(data);
       showSubmitModal.set(true);
     } catch (e) {
@@ -268,10 +305,11 @@
         {:else}
           <div class="space-y-2">
             {#each yourAddons as a}
-              {@const name = topField(a.yaml_content, 'name') || a.addon_slug}
-              {@const version = topField(a.yaml_content, 'version')}
-              {@const category = topField(a.yaml_content, 'category')}
-              {@const icon = topField(a.yaml_content, 'icon')}
+              {@const reg = registryBySlug[(a.addon_slug || '').toLowerCase()]}
+              {@const name = reg?.name || topField(a.yaml_content, 'name') || a.addon_slug}
+              {@const version = reg?.version || topField(a.yaml_content, 'version')}
+              {@const category = reg?.category || topField(a.yaml_content, 'category')}
+              {@const icon = reg?.icon ?? topField(a.yaml_content, 'icon')}
               {@const commit = commitOf(a.yaml_content)}
               {@const hasPending = pendingSlugs.has(a.addon_slug)}
               <div class="bg-bg-secondary border border-border rounded-lg p-4 flex items-center gap-4 hover:bg-bg-tertiary transition-colors">
@@ -318,9 +356,19 @@
                 <!-- Actions -->
                 <div class="flex-shrink-0 flex items-center gap-2">
                   <button
+                    on:click={() => (quickEditTarget = a)}
+                    title="Edit icon, description, keywords, category, or dependencies — no PR required"
+                    class="px-3 py-2 bg-bg-tertiary hover:bg-accent hover:text-white border border-border rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors text-text-secondary"
+                  >
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+                    </svg>
+                    Quick edit
+                  </button>
+                  <button
                     on:click={() => update(a)}
                     disabled={updating[a.id] || hasPending}
-                    title={hasPending ? 'You already have an update awaiting review' : 'Submit a new version'}
+                    title={hasPending ? 'You already have an update awaiting review' : 'Submit a new version (re-pins the commit, requires admin review)'}
                     class="px-3 py-2 bg-bg-tertiary hover:bg-accent hover:text-white border border-border rounded-lg text-xs font-medium flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-bg-tertiary disabled:hover:text-text-secondary transition-colors text-text-secondary"
                   >
                     {#if updating[a.id]}
@@ -331,7 +379,7 @@
                         <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
                       </svg>
                     {/if}
-                    {updating[a.id] ? 'Loading…' : 'Update'}
+                    {updating[a.id] ? 'Loading…' : 'New version'}
                   </button>
                   <button
                     on:click={() => startDeleteAddon(a)}
@@ -606,3 +654,8 @@
     </div>
   </div>
 {/if}
+
+<QuickEditModal
+  bind:target={quickEditTarget}
+  on:saved={load}
+/>
