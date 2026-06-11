@@ -302,6 +302,8 @@
         </div>
       </button>
 
+      <div class="text-[9px] text-text-muted font-mono text-center mt-1.5" title="Manager version">{version || '...'}</div>
+
       {#if accountMenuOpen && $currentUser}
         <div class="absolute bottom-0 left-full ml-2 w-[220px] bg-bg-elevated border border-border rounded-xl shadow-modal overflow-hidden z-50">
           <div class="px-3 py-2.5 border-b border-border bg-header-grad">
