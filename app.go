@@ -612,6 +612,28 @@ func (a *App) SetSkipBackups(skip bool) error {
 	return nil
 }
 
+// GetLayoutChooserShown reports whether the one-time layout picker has been
+// dismissed. Frontend uses this on launch to decide whether to surface the
+// picker. Stored on the Go side because WebView2 localStorage isn't always
+// sticky between builds / reinstalls.
+func (a *App) GetLayoutChooserShown() bool {
+	cfg := config.Get()
+	if cfg == nil {
+		return false
+	}
+	return cfg.LayoutChooserShown
+}
+
+// MarkLayoutChooserShown is called by the picker when the user confirms a
+// choice; subsequent launches won't surface the picker again.
+func (a *App) MarkLayoutChooserShown() error {
+	if err := config.MarkLayoutChooserShown(); err != nil {
+		return err
+	}
+	logger.Info("config: layout chooser dismissed")
+	return nil
+}
+
 func (a *App) SetAddonPath(path string) error {
 	return config.SetAddonPath(path)
 }
@@ -2249,6 +2271,30 @@ func (a *App) OpenBackupFolder() error {
 		cmd = exec.Command("open", backupDir)
 	default:
 		cmd = exec.Command("xdg-open", backupDir)
+	}
+	return cmd.Start()
+}
+
+// OpenAddonFolder opens the configured addon install directory in the
+// platform file manager. Creates the directory if it doesn't exist so the
+// user can drop in / inspect files even on a fresh install.
+func (a *App) OpenAddonFolder() error {
+	addonPath := config.Get().AddonPath
+	if addonPath == "" {
+		return fmt.Errorf("addon path not configured")
+	}
+	if err := os.MkdirAll(addonPath, 0755); err != nil {
+		return fmt.Errorf("failed to ensure addon folder: %v", err)
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = exec.Command("explorer", addonPath)
+	case "darwin":
+		cmd = exec.Command("open", addonPath)
+	default:
+		cmd = exec.Command("xdg-open", addonPath)
 	}
 	return cmd.Start()
 }

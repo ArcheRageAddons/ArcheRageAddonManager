@@ -1,6 +1,6 @@
 <script>
   import { onMount } from 'svelte';
-  import { selectedAddon, showAddonDetails, appInitialized, showNotification, refreshAvailableUpdates } from '../stores/app.js';
+  import { selectedAddon, showAddonDetails, appInitialized, showNotification, refreshAvailableUpdates, warningAddon, showWarningModal, downloadProgress, uninstallAddon, showUninstallConfirm, kickOffInstall, installSerially } from '../stores/app.js';
   import { GetAddons, GetCategories, RefreshAddons } from '../../../wailsjs/go/main/App.js';
   import { EventsOn } from '../../../wailsjs/runtime/runtime.js';
   import AddonDetailsModal from './AddonDetailsModal.svelte';
@@ -113,6 +113,40 @@
   function selectAddon(addon) {
     selectedAddon.set(addon);
     showAddonDetails.set(true);
+  }
+
+  async function handleRowInstall(addon, e) {
+    e.stopPropagation();
+    if (addon.overlay_of && !addon.base_installed) {
+      showNotification(`Install ${addon.overlay_of} first — this addon overlays on top of it`, 'warning', 5000);
+      return;
+    }
+    if (!addon.is_installed) {
+      const missing = (addon.dependencies || []).filter((d) => !d.is_installed);
+      if (missing.length > 0) {
+        showNotification(
+          `Install the missing dependenc${missing.length === 1 ? 'y' : 'ies'} first: ${missing.map((d) => d.name).join(', ')}`,
+          'warning', 5000,
+        );
+        return;
+      }
+    }
+    if (addon.has_dangerous_files) {
+      warningAddon.set(addon);
+      showWarningModal.set(true);
+      return;
+    }
+    if (addon.is_installed && addon.has_update) {
+      await installSerially([addon]);
+      return;
+    }
+    kickOffInstall(addon);
+  }
+
+  function handleRowUninstall(addon, e) {
+    e.stopPropagation();
+    uninstallAddon.set(addon);
+    showUninstallConfirm.set(true);
   }
 
   function formatCount(n) {
@@ -303,9 +337,13 @@
         <div>
           {#each filteredAddons as addon (addon.id)}
             {@const active = $selectedAddon?.id === addon.id}
-            <button
+            {@const installing = $downloadProgress.isDownloading && $downloadProgress.addonId === addon.id}
+            <div
+              role="button"
+              tabindex="0"
               on:click={() => selectAddon(addon)}
-              class="w-full px-3 py-2.5 flex items-center gap-3 text-left transition-colors border-l-2 {active ? 'bg-accent/10 border-l-accent' : 'border-l-transparent hover:bg-bg-tertiary/40'}"
+              on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') selectAddon(addon); }}
+              class="group w-full px-3 py-2.5 flex items-center gap-3 text-left transition-colors border-l-2 cursor-pointer {active ? 'bg-accent/10 border-l-accent' : addon.is_installed ? 'border-l-accent/50 hover:bg-bg-tertiary/30' : 'border-l-transparent hover:bg-bg-tertiary/40'}"
             >
               <div class="relative w-9 h-9 rounded-lg bg-gradient-to-br from-bg-tertiary to-bg-secondary flex items-center justify-center flex-shrink-0 overflow-hidden ring-1 ring-border">
                 {#if addon.icon}
@@ -350,7 +388,39 @@
                   {/if}
                 </div>
               </div>
-            </button>
+
+              <!-- Per-row install / uninstall actions -->
+              <div class="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                {#if addon.is_installed}
+                  <button
+                    on:click={(e) => handleRowUninstall(addon, e)}
+                    class="p-1.5 bg-red-500/10 border border-red-500/50 hover:bg-red-500 hover:border-red-500 rounded-md text-red-400 hover:text-white transition-all"
+                    title="Uninstall"
+                  >
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                    </svg>
+                  </button>
+                {/if}
+                <button
+                  on:click={(e) => handleRowInstall(addon, e)}
+                  disabled={installing}
+                  class="p-1.5 bg-accent/10 border border-accent/50 hover:bg-accent hover:border-accent rounded-md text-accent hover:text-white transition-all disabled:opacity-50"
+                  title={addon.is_installed ? (addon.has_update ? 'Update' : 'Reinstall') : 'Install'}
+                >
+                  {#if installing}
+                    <svg class="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                  {:else}
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                    </svg>
+                  {/if}
+                </button>
+              </div>
+            </div>
           {/each}
         </div>
       {/if}

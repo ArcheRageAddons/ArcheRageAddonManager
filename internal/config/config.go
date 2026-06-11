@@ -14,6 +14,11 @@ type Config struct {
 	// git repo is the source of truth). Exposed in Settings → Dev Settings
 	// behind a clearly-labelled warning.
 	SkipBackups bool `json:"skip_backups,omitempty"`
+	// LayoutChooserShown records whether the one-time "Studio vs Classic"
+	// picker has been dismissed. Kept on the Go side so it survives
+	// WebView2 user-data-folder drift between builds (localStorage is
+	// per-WebView and not always sticky).
+	LayoutChooserShown bool `json:"layout_chooser_shown,omitempty"`
 }
 
 // AddonPathCandidate is a possible Addon directory the manager has detected.
@@ -94,6 +99,13 @@ func MarkSetupComplete() error {
 // SetSkipBackups toggles the dev-only "skip backups on update" flag.
 func SetSkipBackups(skip bool) error {
 	appConfig.SkipBackups = skip
+	return Save()
+}
+
+// MarkLayoutChooserShown records that the user has seen / dismissed the
+// one-time layout picker so it never appears again on this install.
+func MarkLayoutChooserShown() error {
+	appConfig.LayoutChooserShown = true
 	return Save()
 }
 

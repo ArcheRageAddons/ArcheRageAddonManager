@@ -35,14 +35,15 @@ layoutMode.subscribe((v) => {
 });
 
 // One-time first-run prompt that asks the user which layout they prefer.
-// Once dismissed, never shown again unless the user clears localStorage.
-const LAYOUT_PROMPT_KEY = 'archerage-layout-prompted';
-function initialPromptShown() {
-  try { return localStorage.getItem(LAYOUT_PROMPT_KEY) === '1'; } catch { return false; }
-}
-export const showLayoutChooser = writable(!initialPromptShown());
-export function dismissLayoutChooser() {
-  try { localStorage.setItem(LAYOUT_PROMPT_KEY, '1'); } catch {}
+// The "shown" flag lives in config.json on the Go side (see
+// GetLayoutChooserShown / MarkLayoutChooserShown) — localStorage proved
+// flaky between rebuilds because WebView2's user-data folder can drift.
+// The store starts false and gets flipped to true by App.svelte on launch
+// if the Go side reports the picker hasn't been dismissed yet.
+export const showLayoutChooser = writable(false);
+import { MarkLayoutChooserShown } from '../../../wailsjs/go/main/App.js';
+export async function dismissLayoutChooser() {
+  try { await MarkLayoutChooserShown(); } catch (e) { console.warn('dismiss layout chooser:', e); }
   showLayoutChooser.set(false);
 }
 

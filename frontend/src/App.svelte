@@ -4,10 +4,11 @@
     currentPage,
     appInitialized,
     showWelcomeModal,
+    showLayoutChooser,
     showNotification,
     layoutMode,
   } from './lib/stores/app.js';
-  import { GetInstalledAddons, IsFirstRun, LogFromFrontend } from '../wailsjs/go/main/App.js';
+  import { GetInstalledAddons, IsFirstRun, LogFromFrontend, GetLayoutChooserShown } from '../wailsjs/go/main/App.js';
 
   // Mirror console.* to manager.log via the Go side (which scrubs tokens).
   function pipeConsoleToLog() {
@@ -31,6 +32,22 @@
     }
   }
   pipeConsoleToLog();
+
+  // Fires after appInitialized flips true — covers both fresh-install
+  // (welcome modal → addon path → init) and existing installs.
+  let layoutChecked = false;
+  async function checkLayoutChooser() {
+    try {
+      const shown = await GetLayoutChooserShown();
+      if (!shown) showLayoutChooser.set(true);
+    } catch (e) {
+      console.warn('Failed to read layout-chooser flag:', e);
+    }
+  }
+  $: if ($appInitialized && !layoutChecked) {
+    layoutChecked = true;
+    checkLayoutChooser();
+  }
 
   // ===== Studio shell components (split-view, icon rail) =====
   import IconRail from './lib/components/IconRail.svelte';

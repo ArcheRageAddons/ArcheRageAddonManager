@@ -1,12 +1,24 @@
 <script>
   import { onMount } from 'svelte';
-  import { currentPage, currentUser, availableUpdates } from '../stores/app.js';
+  import { currentPage, currentUser, availableUpdates, refreshAvailableUpdates, downloadProgress, installSerially } from '../stores/app.js';
   import { GetVersion, GetCurrentUser, LoginWithDiscord, Logout } from '../../../wailsjs/go/main/App.js';
   import { EventsOn } from '../../../wailsjs/runtime/runtime.js';
   import { showNotification } from '../stores/app.js';
+  import { dropdown } from '../motion.js';
 
   let version = '';
   let busy = false;
+  let updatesOpen = false;
+  let updateBusyById = {};
+  let bulkBusy = false;
+  let bulkProgress = { done: 0, total: 0 };
+
+  onMount(() => {
+    refreshAvailableUpdates();
+    const onAddon = () => refreshAvailableUpdates();
+    window.addEventListener('addon-installed', onAddon);
+    return () => window.removeEventListener('addon-installed', onAddon);
+  });
 
   onMount(async () => {
     try { version = await GetVersion(); } catch { version = ''; }
@@ -44,9 +56,38 @@
 
   function handleDocClick(e) {
     if (accountMenuOpen && !e.target.closest?.('[data-rail-account]')) accountMenuOpen = false;
+    if (updatesOpen && !e.target.closest?.('[data-rail-updates]')) updatesOpen = false;
   }
   function handleKey(e) {
-    if (e.key === 'Escape') accountMenuOpen = false;
+    if (e.key === 'Escape') { accountMenuOpen = false; updatesOpen = false; }
+  }
+
+  async function updateOne(addon) {
+    if (updateBusyById[addon.id]) return;
+    updateBusyById = { ...updateBusyById, [addon.id]: true };
+    try {
+      const { failed } = await installSerially([addon]);
+      if (failed > 0) showNotification(`Failed to update ${addon.name}`, 'error', 6000);
+    } finally {
+      updateBusyById = { ...updateBusyById, [addon.id]: false };
+      await refreshAvailableUpdates();
+    }
+  }
+
+  async function updateAll() {
+    if (bulkBusy) return;
+    const targets = $availableUpdates.slice();
+    if (!targets.length) return;
+    bulkBusy = true;
+    bulkProgress = { done: 0, total: targets.length };
+    const { ok, failed } = await installSerially(targets, {
+      onProgress: ({ done, total }) => { bulkProgress = { done, total }; },
+    });
+    bulkBusy = false;
+    if (failed === 0) showNotification(`Updated ${ok} addon${ok === 1 ? '' : 's'}`, 'success');
+    else showNotification(`Updated ${ok} of ${targets.length} (${failed} failed)`, failed === targets.length ? 'error' : 'info');
+    await refreshAvailableUpdates();
+    if ($availableUpdates.length === 0) updatesOpen = false;
   }
   onMount(() => {
     document.addEventListener('click', handleDocClick);
@@ -109,8 +150,108 @@
     {/each}
   </nav>
 
-  <!-- Bottom: settings + account -->
+  <!-- Bottom: updates bell + settings + account -->
   <div class="w-full flex flex-col items-center gap-1 pb-3 px-2">
+    <!-- Updates bell -->
+    <div class="relative" data-rail-updates>
+      <div class="relative group w-full flex justify-center">
+        <button
+          on:click={() => (updatesOpen = !updatesOpen)}
+          aria-label="Addon updates"
+          class="relative w-11 h-11 rounded-xl flex items-center justify-center transition-all {updateCount > 0 ? 'text-warning hover:bg-warning/10' : 'text-text-secondary hover:bg-bg-tertiary/60 hover:text-text-primary'}"
+        >
+          <svg class="w-[19px] h-[19px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+          </svg>
+          {#if updateCount > 0}
+            <span class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-warning text-bg-primary text-[10px] font-bold flex items-center justify-center ring-2 ring-bg-sidebar {bulkBusy ? '' : 'animate-pulse'}">
+              {updateCount > 99 ? '99+' : updateCount}
+            </span>
+          {/if}
+        </button>
+        {#if !updatesOpen}
+          <div class="pointer-events-none absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-md bg-bg-elevated border border-border text-xs text-text-primary font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity z-50 shadow-lift">
+            {updateCount > 0 ? `${updateCount} update${updateCount === 1 ? '' : 's'}` : 'Updates'}
+          </div>
+        {/if}
+      </div>
+
+      {#if updatesOpen}
+        <div class="absolute bottom-0 left-full ml-2 w-[340px] bg-bg-elevated border border-border rounded-2xl shadow-modal overflow-hidden z-50" transition:dropdown>
+          <div class="px-4 py-3 border-b border-border bg-header-grad flex items-center justify-between">
+            <div>
+              <span class="text-sm font-semibold text-text-primary">Addon updates</span>
+              <div class="text-[11px] text-text-muted mt-0.5">
+                {updateCount > 0 ? `${updateCount} ${updateCount === 1 ? 'update' : 'updates'} ready` : 'All up to date'}
+              </div>
+            </div>
+            {#if updateCount > 0}
+              <span class="px-2 py-0.5 bg-warning/15 text-warning text-[10px] font-bold uppercase tracking-wider rounded-md">New</span>
+            {/if}
+          </div>
+
+          {#if updateCount === 0}
+            <div class="px-4 py-7 text-center">
+              <div class="mx-auto w-12 h-12 rounded-2xl bg-accent/10 border border-accent/30 flex items-center justify-center mb-2">
+                <svg class="w-6 h-6 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 6L9 17l-5-5"/>
+                </svg>
+              </div>
+              <p class="text-sm text-text-primary font-medium">You're up to date</p>
+              <p class="text-xs text-text-muted mt-1">Nothing to install right now.</p>
+            </div>
+          {:else}
+            <div class="max-h-72 overflow-y-auto">
+              {#each $availableUpdates as addon (addon.id)}
+                <div class="px-4 py-2.5 border-b border-border last:border-b-0 flex items-center gap-2.5 hover:bg-bg-tertiary/40 transition-colors">
+                  <div class="flex-1 min-w-0">
+                    <div class="text-sm text-text-primary truncate font-medium">{addon.name}</div>
+                    <div class="text-[11px] text-text-muted flex items-center gap-1.5 mt-0.5">
+                      <span class="font-mono">v{addon.version}</span>
+                      <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                      <span class="text-accent">newer</span>
+                    </div>
+                  </div>
+                  <button
+                    on:click={() => updateOne(addon)}
+                    disabled={updateBusyById[addon.id] || bulkBusy || $downloadProgress.isDownloading}
+                    class="px-3 py-1.5 bg-accent/10 border border-accent/50 hover:bg-accent hover:border-accent rounded-lg text-xs font-semibold text-accent hover:text-white disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5 transition-all"
+                  >
+                    {#if updateBusyById[addon.id]}
+                      <svg class="animate-spin w-3 h-3" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                      </svg>
+                    {/if}
+                    Update
+                  </button>
+                </div>
+              {/each}
+            </div>
+            {#if updateCount > 1}
+              <div class="px-4 py-3 border-t border-border bg-bg-primary/40">
+                <button
+                  on:click={updateAll}
+                  disabled={bulkBusy || $downloadProgress.isDownloading}
+                  class="w-full px-3 py-2.5 bg-accent-grad hover:brightness-110 text-white rounded-lg text-sm font-semibold disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-soft"
+                >
+                  {#if bulkBusy}
+                    <svg class="animate-spin w-4 h-4" viewBox="0 0 24 24">
+                      <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"/>
+                      <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                    </svg>
+                    <span>Updating {bulkProgress.done}/{bulkProgress.total}…</span>
+                  {:else}
+                    <span>Update all ({updateCount})</span>
+                  {/if}
+                </button>
+              </div>
+            {/if}
+          {/if}
+        </div>
+      {/if}
+    </div>
     <div class="relative group w-full flex justify-center">
       <button
         on:click={() => currentPage.set('settings')}

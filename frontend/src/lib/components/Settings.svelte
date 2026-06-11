@@ -6,6 +6,7 @@
     SetAddonPath,
     SelectFolder,
     OpenLogFolder,
+    OpenAddonFolder,
     GetSkipBackups,
     SetSkipBackups,
   } from '../../../wailsjs/go/main/App.js';
@@ -75,6 +76,14 @@
       await OpenLogFolder();
     } catch (e) {
       showNotification(`Couldn't open log folder: ${e}`, 'error');
+    }
+  }
+
+  async function openAddons() {
+    try {
+      await OpenAddonFolder();
+    } catch (e) {
+      showNotification(`Couldn't open addon folder: ${e}`, 'error');
     }
   }
 </script>
@@ -226,6 +235,7 @@
             <button
               on:click={handleBrowse}
               class="px-4 py-2.5 bg-bg-tertiary hover:bg-border rounded-lg transition-colors text-sm"
+              title="Pick a different addon folder"
             >
               Browse
             </button>
@@ -237,6 +247,19 @@
               {saving ? 'Saving...' : 'Save'}
             </button>
           </div>
+
+          <button
+            on:click={openAddons}
+            class="mt-2.5 inline-flex items-center gap-1.5 text-xs text-text-secondary hover:text-accent transition-colors"
+            title="Open the currently configured addon folder in File Explorer"
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+              <path d="M7 13l3 3 7-7" opacity="0"/>
+              <path d="M14 11l3 3-3 3M17 14H9"/>
+            </svg>
+            <span>Open this folder in File Explorer</span>
+          </button>
 
           <!-- OneDrive warning -->
           <div class="mt-4 rounded-lg border border-warning/40 bg-warning/10 px-3 py-2.5 text-xs text-text-secondary">

@@ -1,7 +1,12 @@
 <script>
   import { onMount } from 'svelte';
   import { showNotification, uninstallAddon, showUninstallConfirm, installSerially, refreshAvailableUpdates } from '../../stores/app.js';
-  import { GetInstalledAddons } from '../../../../wailsjs/go/main/App.js';
+  import { GetInstalledAddons, OpenAddonFolder } from '../../../../wailsjs/go/main/App.js';
+
+  async function openFolder() {
+    try { await OpenAddonFolder(); }
+    catch (e) { showNotification(`Couldn't open folder: ${e}`, 'error'); }
+  }
 
   let installedAddons = [];
   let loading = true;
@@ -101,6 +106,17 @@
             {/if}
           </button>
         {/if}
+        <button
+          on:click={openFolder}
+          class="px-3 py-2 bg-bg-tertiary/60 hover:bg-bg-tertiary border border-border rounded-lg transition-all flex items-center gap-2 text-xs text-text-secondary hover:text-text-primary"
+          title="Open the addon folder in File Explorer"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+            <path d="M14 11l3 3-3 3M17 14H9"/>
+          </svg>
+          <span>Open folder</span>
+        </button>
         <button
           on:click={loadInstalled}
           disabled={bulkUpdating}

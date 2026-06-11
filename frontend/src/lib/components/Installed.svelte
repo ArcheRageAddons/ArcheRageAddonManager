@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { showNotification, uninstallAddon, showUninstallConfirm, installSerially, refreshAvailableUpdates, selectedAddon, showAddonDetails } from '../stores/app.js';
-  import { GetInstalledAddons, GetAddonDetails } from '../../../wailsjs/go/main/App.js';
+  import { GetInstalledAddons, GetAddonDetails, OpenAddonFolder } from '../../../wailsjs/go/main/App.js';
   import AddonDetailsModal from './AddonDetailsModal.svelte';
   import { resizable, persistedWidth } from '../resize.js';
 
@@ -61,6 +61,11 @@
     showUninstallConfirm.set(true);
   }
 
+  async function openFolder() {
+    try { await OpenAddonFolder(); }
+    catch (e) { showNotification(`Couldn't open folder: ${e}`, 'error'); }
+  }
+
   async function selectAddon(installed) {
     // Load full details for the right pane
     try {
@@ -96,6 +101,17 @@
             {/if}
           </p>
         </div>
+        <div class="flex items-center gap-0.5">
+        <button
+          on:click={openFolder}
+          class="p-1.5 rounded-md hover:bg-bg-tertiary text-text-muted hover:text-text-primary transition-colors"
+          title="Open addon folder in File Explorer"
+        >
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/>
+            <path d="M14 11l3 3-3 3M17 14H9"/>
+          </svg>
+        </button>
         <button
           on:click={loadInstalled}
           disabled={bulkUpdating}
@@ -107,6 +123,7 @@
             <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
           </svg>
         </button>
+        </div>
       </div>
 
       {#if addonsWithUpdate.length > 0}
