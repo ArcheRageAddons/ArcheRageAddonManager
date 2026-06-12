@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"archerage-addon-manager/internal/logger"
+	"archerage-addon-manager/internal/supabase"
 
 	"gopkg.in/yaml.v3"
 )
@@ -143,7 +144,66 @@ func (r *RegistryClient) addAuthHeader(req *http.Request) {
 	}
 }
 
+// GetAllAddonsFromSupabase fetches the registry from the public.registry_addons
+// mirror table — one PostgREST call, no GitHub API budget. Returns (nil, err)
+// on any failure so the caller can fall back to GitHub.
+func (r *RegistryClient) GetAllAddonsFromSupabase() ([]Addon, []string, error) {
+	url := supabase.URL + "/rest/v1/registry_addons?select=id,addon_json,blob_sha&order=id.asc"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	req.Header.Set("apikey", supabase.PublishableKey)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, nil, fmt.Errorf("supabase %s: %s", resp.Status, string(body))
+	}
+
+	var rows []struct {
+		ID        string          `json:"id"`
+		AddonJSON json.RawMessage `json:"addon_json"`
+		BlobSHA   string          `json:"blob_sha"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&rows); err != nil {
+		return nil, nil, fmt.Errorf("supabase decode: %w", err)
+	}
+
+	addons := make([]Addon, 0, len(rows))
+	shas := make([]string, 0, len(rows))
+	for _, row := range rows {
+		var addon Addon
+		if err := json.Unmarshal(row.AddonJSON, &addon); err != nil {
+			logger.Warnf("registry: skipping %s — bad json from supabase: %v", row.ID, err)
+			continue
+		}
+		addon.ID = row.ID
+		if addon.GitHub.Branch == "" {
+			addon.GitHub.Branch = "main"
+		}
+		if addon.Category == "" {
+			addon.Category = "Other"
+		}
+		addons = append(addons, addon)
+		shas = append(shas, row.BlobSHA)
+	}
+	return addons, shas, nil
+}
+
 func (r *RegistryClient) GetAllAddons() ([]Addon, error) {
+	if addons, _, err := r.GetAllAddonsFromSupabase(); err == nil && len(addons) > 0 {
+		return addons, nil
+	} else if err != nil {
+		logger.Warnf("registry: supabase fetch failed (%v) — falling back to GitHub", err)
+	}
+
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/addons?ref=%s",
 		r.registryOwner, r.registryRepo, r.registryBranch)
 
@@ -271,49 +331,10 @@ func (r *RegistryClient) fetchAddonFromFile(content GitHubContent) (Addon, error
 	return addon, nil
 }
 
-// fetchYAMLBytes pulls a registry YAML via the Git Blob API — it's
-// content-addressed by SHA, so unlike raw.githubusercontent.com (which can
-// serve a stale copy for ~5 min after a commit) every fetch is guaranteed
-// fresh. Raw is kept as a fallback for legacy listings without a SHA.
+// Raw doesn't count against the GitHub API rate limit, so unauthenticated
+// users (60/hr) refresh freely. CDN-cached ~5 min after a commit; the post-
+// quick-edit path uses FetchAddonFresh to bypass that.
 func (r *RegistryClient) fetchYAMLBytes(content GitHubContent) ([]byte, error) {
-	if content.SHA != "" {
-		url := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/blobs/%s",
-			r.registryOwner, r.registryRepo, content.SHA)
-		req, err := http.NewRequest("GET", url, nil)
-		if err != nil {
-			return nil, err
-		}
-		req.Header.Set("Accept", "application/vnd.github.v3+json")
-		req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
-		r.addAuthHeader(req)
-
-		resp, err := r.client.Do(req)
-		if err != nil {
-			return nil, err
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != 200 {
-			return nil, fmt.Errorf("blob fetch %s: %s", content.SHA[:8], resp.Status)
-		}
-
-		var blob struct {
-			Content  string `json:"content"`
-			Encoding string `json:"encoding"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&blob); err != nil {
-			return nil, fmt.Errorf("blob decode %s: %w", content.SHA[:8], err)
-		}
-		if blob.Encoding != "base64" {
-			return nil, fmt.Errorf("blob %s: unexpected encoding %q", content.SHA[:8], blob.Encoding)
-		}
-		decoded, err := base64.StdEncoding.DecodeString(strings.ReplaceAll(blob.Content, "\n", ""))
-		if err != nil {
-			return nil, fmt.Errorf("blob %s base64: %w", content.SHA[:8], err)
-		}
-		return decoded, nil
-	}
-
 	url := content.DownloadURL
 	if url == "" {
 		url = fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s",
@@ -338,6 +359,103 @@ func (r *RegistryClient) fetchYAMLBytes(content GitHubContent) ([]byte, error) {
 		return nil, fmt.Errorf("raw fetch %s: %s", content.Name, resp.Status)
 	}
 	return io.ReadAll(resp.Body)
+}
+
+// FetchAddonFresh re-fetches one addon via the Git Blob API (content-addressed
+// by SHA, no CDN staleness). Costs 2 API calls; intended for the post-quick-
+// edit flow where the caller is authenticated and needs immediate freshness.
+func (r *RegistryClient) FetchAddonFresh(slug string) (Addon, string, error) {
+	var addon Addon
+
+	listingURL := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/addons?ref=%s",
+		r.registryOwner, r.registryRepo, r.registryBranch)
+	req, err := http.NewRequest("GET", listingURL, nil)
+	if err != nil {
+		return addon, "", err
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+	req.Header.Set("Cache-Control", "no-cache")
+	r.addAuthHeader(req)
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return addon, "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return addon, "", fmt.Errorf("listing: %s", resp.Status)
+	}
+
+	var contents []GitHubContent
+	if err := json.NewDecoder(resp.Body).Decode(&contents); err != nil {
+		return addon, "", err
+	}
+
+	var found *GitHubContent
+	for i := range contents {
+		name := strings.ToLower(contents[i].Name)
+		if name == slug+".yaml" || name == slug+".yml" {
+			found = &contents[i]
+			break
+		}
+	}
+	if found == nil {
+		return addon, "", fmt.Errorf("addon %q not in registry listing", slug)
+	}
+
+	body, err := r.fetchBlob(found.SHA)
+	if err != nil {
+		return addon, "", err
+	}
+	body = quotedBoolRe.ReplaceAll(body, []byte("${1}${2}"))
+
+	if err := yaml.Unmarshal(body, &addon); err != nil {
+		return addon, "", fmt.Errorf("parse: %w", err)
+	}
+	if addon.Name == "" || addon.FolderName == "" || addon.Author == "" || addon.Version == "" || addon.GitHub.Repo == "" {
+		return addon, "", fmt.Errorf("parsed YAML missing required fields")
+	}
+	addon.ID = slug
+	if addon.GitHub.Branch == "" {
+		addon.GitHub.Branch = "main"
+	}
+	if addon.Category == "" {
+		addon.Category = "Other"
+	}
+	return addon, found.SHA, nil
+}
+
+func (r *RegistryClient) fetchBlob(sha string) ([]byte, error) {
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/git/blobs/%s",
+		r.registryOwner, r.registryRepo, sha)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github.v3+json")
+	req.Header.Set("User-Agent", "ArcheRage-Addon-Manager")
+	r.addAuthHeader(req)
+
+	resp, err := r.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("blob %s: %s", sha[:8], resp.Status)
+	}
+	var blob struct {
+		Content  string `json:"content"`
+		Encoding string `json:"encoding"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&blob); err != nil {
+		return nil, err
+	}
+	if blob.Encoding != "base64" {
+		return nil, fmt.Errorf("unexpected encoding %q", blob.Encoding)
+	}
+	return base64.StdEncoding.DecodeString(strings.ReplaceAll(blob.Content, "\n", ""))
 }
 
 func ParseRepoURL(repoURL string) (owner, repo string, err error) {

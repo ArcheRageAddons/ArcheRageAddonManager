@@ -5,7 +5,6 @@
     GetCategories,
     GetAddons,
     QuickEditAddon,
-    RefreshAddons,
   } from '../../../wailsjs/go/main/App.js';
   import Spinner from './Spinner.svelte';
   import { modalBackdrop, modalContent } from '../motion.js';
@@ -169,9 +168,6 @@
       const result = await QuickEditAddon(target.addon_slug || target.folder_name, changes);
       const ndone = (result?.fields || []).length;
       showNotification(`Saved (${ndone} field${ndone === 1 ? '' : 's'} updated)`, 'success', 4000);
-      // Refresh BEFORE dispatching 'saved' so the parent's reload sees the
-      // updated cache. Otherwise it races and renders stale data.
-      try { await RefreshAddons(); } catch {}
       dispatch('saved');
       close();
     } catch (e) {

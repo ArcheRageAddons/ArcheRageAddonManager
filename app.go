@@ -1404,13 +1404,46 @@ func (a *App) QuickEditAddon(slug string, fields QuickEditFields) (*QuickEditRes
 		return nil, fmt.Errorf("quick edit failed (%d): %s", status, string(body))
 	}
 
-	// Bust the listing ETag so the next refresh re-fetches the contents
-	// listing. Per-YAML entries stay cached — only the edited file's blob SHA
-	// changes, so the conditional refresh refetches one YAML, not all of them.
 	a.cachedRegistryETag = ""
+
+	// Overlay the just-committed YAML so the editor sees their change without
+	// waiting for raw's ~5 min CDN window. Failure here is non-fatal — change
+	// is already live on the registry.
+	if err := a.refreshSingleAddonFresh(slug); err != nil {
+		logger.Warnf("quick edit: post-edit cache refresh failed for %s: %v", slug, err)
+	} else if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "registry:refreshed")
+	}
 
 	logger.Infof("quick edit: %s (%d field%s)", slug, len(resp.Fields), pluralS(len(resp.Fields)))
 	return &QuickEditResult{OK: resp.OK, Slug: resp.Slug, Fields: resp.Fields}, nil
+}
+
+func (a *App) refreshSingleAddonFresh(slug string) error {
+	addon, sha, err := a.registryClient.FetchAddonFresh(slug)
+	if err != nil {
+		return err
+	}
+
+	entry := registry.RegistryCacheEntry{BlobSHA: sha, Addon: addon}
+	found := false
+	for i, e := range a.cachedRegistryEntries {
+		if e.Addon.ID == slug {
+			a.cachedRegistryEntries[i] = entry
+			found = true
+			break
+		}
+	}
+	if !found {
+		a.cachedRegistryEntries = append(a.cachedRegistryEntries, entry)
+	}
+	a.cachedAddons = registry.EntriesToAddons(a.cachedRegistryEntries)
+
+	return registry.SaveCache(a.registryCachePath(), &registry.RegistryCache{
+		ETag:      "",
+		FetchedAt: time.Now(),
+		Entries:   a.cachedRegistryEntries,
+	})
 }
 
 func pluralS(n int) string {
@@ -1628,7 +1661,30 @@ func (a *App) DeleteAddon(slug string) error {
 		}
 		return fmt.Errorf("returned %d: %s", status, string(body))
 	}
+
+	a.cachedRegistryETag = ""
+	a.removeAddonFromCache(slug)
+	if a.ctx != nil {
+		wailsRuntime.EventsEmit(a.ctx, "registry:refreshed")
+	}
 	return nil
+}
+
+func (a *App) removeAddonFromCache(slug string) {
+	slug = strings.ToLower(strings.TrimSpace(slug))
+	out := a.cachedRegistryEntries[:0]
+	for _, e := range a.cachedRegistryEntries {
+		if e.Addon.ID != slug {
+			out = append(out, e)
+		}
+	}
+	a.cachedRegistryEntries = out
+	a.cachedAddons = registry.EntriesToAddons(out)
+	_ = registry.SaveCache(a.registryCachePath(), &registry.RegistryCache{
+		ETag:      "",
+		FetchedAt: time.Now(),
+		Entries:   a.cachedRegistryEntries,
+	})
 }
 
 // RLS gates per-row: users can only delete their own non-pending rows.

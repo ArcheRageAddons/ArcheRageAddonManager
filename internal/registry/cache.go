@@ -17,7 +17,7 @@ import (
 const (
 	// Bump to invalidate every user's on-disk cache after a breaking change to
 	// the cached shape or to the parsing semantics.
-	cacheVersion = 2
+	cacheVersion = 3
 	// Defensive cap so a corrupted / hostile cache file can't OOM the parser.
 	maxCacheBytes = 10 * 1024 * 1024
 )
@@ -95,14 +95,25 @@ func SaveCache(filePath string, cache *RegistryCache) error {
 	return os.Rename(tmp, filePath)
 }
 
-// GetAllAddonsConditional revalidates the cached registry against GitHub.
-//
-//   - Sends `If-None-Match: <prevETag>`. If GitHub returns 304, returns
-//     ErrCacheNotModified so the caller can keep using its in-memory cache.
-//   - On 200, walks the new listing and reuses any cached entry whose blob
-//     SHA matches the listing's SHA — only changed / new YAMLs are refetched.
-//   - Returns (newETag, newEntries, nil) on success.
+// GetAllAddonsConditional refreshes the registry. Tries the Supabase mirror
+// first (one PostgREST call, no GitHub API budget). Falls back to GitHub's
+// contents API + conditional ETag when Supabase is unreachable.
 func (r *RegistryClient) GetAllAddonsConditional(prevETag string, prevEntries []RegistryCacheEntry) (string, []RegistryCacheEntry, error) {
+	if addons, shas, err := r.GetAllAddonsFromSupabase(); err == nil && len(addons) > 0 {
+		entries := make([]RegistryCacheEntry, len(addons))
+		for i := range addons {
+			entries[i] = RegistryCacheEntry{BlobSHA: shas[i], Addon: addons[i]}
+		}
+		if sameEntries(prevEntries, entries) {
+			return prevETag, prevEntries, ErrCacheNotModified
+		}
+		// Empty ETag — Supabase path doesn't use ETag-based revalidation.
+		// Next refresh will re-fetch unconditionally; that's cheap.
+		return "", entries, nil
+	} else if err != nil {
+		logger.Warnf("registry: supabase fetch failed (%v) — falling back to GitHub", err)
+	}
+
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/contents/addons?ref=%s",
 		r.registryOwner, r.registryRepo, r.registryBranch)
 
@@ -203,4 +214,22 @@ func EntriesToAddons(entries []RegistryCacheEntry) []Addon {
 		out = append(out, e.Addon)
 	}
 	return out
+}
+
+// sameEntries returns true when both slices contain the same set of (id,
+// blob_sha) pairs — i.e. nothing changed since the last fetch.
+func sameEntries(a, b []RegistryCacheEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	prev := make(map[string]string, len(a))
+	for _, e := range a {
+		prev[e.Addon.ID] = e.BlobSHA
+	}
+	for _, e := range b {
+		if prev[e.Addon.ID] != e.BlobSHA {
+			return false
+		}
+	}
+	return true
 }
